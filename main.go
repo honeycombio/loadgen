@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"os/signal"
 	"sync"
 	"time"
 
@@ -77,7 +78,7 @@ var servicenames = []string{
 type Options struct {
 	Host       string        `long:"host" description:"the url of the host to receive the metrics (or honeycomb, dogfood, localhost)" default:"honeycomb"`
 	Insecure   bool          `long:"insecure" description:"use this for http connections"`
-	UseEvents  bool          `long:"useevents" description:"use this to send honeycomb-formatted data instead of otlp traces"`
+	Sender     string        `long:"sender" description:"type of sender (honeycomb, otlp, stdout, dummy)" default:"honeycomb"`
 	Dataset    string        `long:"dataset" description:"if set, sends all traces to the given dataset; otherwise, sends them to the dataset named for the service"`
 	APIKey     string        `long:"apikey" description:"the honeycomb API key"`
 	NServices  int           `long:"nservices" description:"the number of services to simulate" default:"1"`
@@ -141,9 +142,10 @@ func main() {
 	}
 
 	var sender Sender
-	if args.UseEvents {
+	switch args.Sender {
+	case "honeycomb":
 		sender = NewHoneycombSender(args, host)
-	} else {
+	case "otlp":
 		// ctx := context.Background()
 
 		// var headers = map[string]string{
@@ -151,18 +153,33 @@ func main() {
 		// 	"x-honeycomb-dataset": args.Dataset,
 		// }
 		sender = NewOTelHoneySender(args.Dataset, args.APIKey, host, insecure)
+	case "stdout":
+		sender = NewStdoutSender()
+	case "dummy":
+		sender = NewDummySender()
 	}
+
 	spans := make(chan *Span, 1000)
 	stop := make(chan struct{})
 	wg := &sync.WaitGroup{}
 	sender.Run(wg, spans, stop)
 
 	// start the load generator
-	generator := NewSimpleGenerator(args)
+	generator := NewTraceGenerator(args)
 	wg.Add(1)
 	go generator.Generate(wg, spans, stop)
 
+	// catch ctrl-c and shut down gracefully
+	sigch := make(chan os.Signal, 1)
+	signal.Notify(sigch, os.Interrupt)
+	wg.Add(1)
+	go func() {
+		<-sigch
+		fmt.Println("\nshutting down")
+		close(stop)
+		wg.Done()
+	}()
+
 	// wait for things to finish
 	wg.Wait()
-	time.Sleep(1 * time.Second)
 }

@@ -11,12 +11,19 @@ type Generator interface {
 	Generate(spans chan *Span, stop chan struct{})
 }
 
-type SimpleGenerator struct {
-	opts Options
+type TraceGenerator struct {
+	depth     int
+	spanCount int
+	duration  time.Duration
+	mut       sync.RWMutex
 }
 
-func NewSimpleGenerator(opts Options) *SimpleGenerator {
-	return &SimpleGenerator{opts: opts}
+func NewTraceGenerator(opts Options) *TraceGenerator {
+	return &TraceGenerator{
+		depth:     opts.Depth,
+		spanCount: opts.SpanCount,
+		duration:  opts.Duration,
+	}
 }
 
 // randID creates a random byte array of length l and returns it as a hex string.
@@ -34,9 +41,9 @@ func randID(l int) string {
 // - spancount is the average number of spans in a trace.
 // If spancount is less than depth, the trace will be truncated at spancount.
 // If spancount is greater than depth, some of the children will have siblings.
-func (s *SimpleGenerator) generate_spans(spans []*Span, depth int, spancount int, timeRemaining time.Duration) []*Span {
+func (s *TraceGenerator) generate_spans(spans chan *Span, tid, pid string, depth int, spancount int, timeRemaining time.Duration) {
 	if depth == 0 {
-		return spans
+		return
 	}
 	// this is the number of spans at this level
 	nspans := 1
@@ -45,8 +52,6 @@ func (s *SimpleGenerator) generate_spans(spans []*Span, depth int, spancount int
 		// between spancount and depth. (but we'll override this if it's a root span)
 		nspans = 1 + rand.Intn(spancount-depth-1)
 	}
-	root := spans[0]
-	current := spans[len(spans)-1]
 
 	durationRemaining := time.Duration(rand.Intn(int(timeRemaining) / (spancount + 1)))
 	durationPerChild := (timeRemaining - durationRemaining) / time.Duration(nspans)
@@ -54,25 +59,24 @@ func (s *SimpleGenerator) generate_spans(spans []*Span, depth int, spancount int
 	for i := 0; i < nspans; i++ {
 		durationThisSpan := durationRemaining / time.Duration(nspans-i)
 		durationRemaining -= durationThisSpan
-		time.Sleep(durationThisSpan)
+		time.Sleep(durationThisSpan / 2)
 		span := &Span{
 			ServiceName: "test",
-			TraceId:     root.TraceId,
-			ParentId:    current.SpanId,
+			TraceId:     tid,
+			ParentId:    pid,
 			SpanId:      randID(8),
 			StartTime:   time.Now(),
 			Fields:      map[string]interface{}{},
 		}
-		spans = append(spans, span)
-		spans = s.generate_spans(spans, depth-1, spancount-nspans, durationPerChild)
+		s.generate_spans(spans, tid, span.SpanId, depth-1, spancount-nspans, durationPerChild)
+		time.Sleep(durationThisSpan / 2)
 		span.EndTime = time.Now()
 		span.Duration = span.EndTime.Sub(span.StartTime)
+		spans <- span
 	}
-	time.Sleep(durationRemaining)
-	return spans
 }
 
-func (s *SimpleGenerator) generate_root(spans []*Span, depth int, spancount int, timeRemaining time.Duration) []*Span {
+func (s *TraceGenerator) generate_root(spans chan *Span, depth int, spancount int, timeRemaining time.Duration) {
 	root := &Span{
 		ServiceName: "test",
 		TraceId:     randID(16),
@@ -83,16 +87,20 @@ func (s *SimpleGenerator) generate_root(spans []*Span, depth int, spancount int,
 	childDuration := (timeRemaining - thisSpanDuration)
 
 	time.Sleep(thisSpanDuration / 2)
-	spans = append(spans, root)
-	spans = s.generate_spans(spans, depth-1, spancount-1, childDuration)
+	s.generate_spans(spans, root.TraceId, root.SpanId, depth-1, spancount-1, childDuration)
+	time.Sleep(thisSpanDuration / 2)
 	root.EndTime = time.Now()
 	root.Duration = root.EndTime.Sub(root.StartTime)
-
-	time.Sleep(thisSpanDuration / 2)
-	return spans
+	spans <- root
 }
 
-func (s *SimpleGenerator) Generate(wg *sync.WaitGroup, spans chan *Span, stop chan struct{}) {
+func (s *TraceGenerator) Generate(wg *sync.WaitGroup, spans chan *Span, stop chan struct{}) {
+	s.mut.RLock()
+	depth := s.depth
+	spanCount := s.spanCount
+	duration := s.duration
+	s.mut.RUnlock()
+
 	defer wg.Done()
 	for {
 		select {
@@ -101,11 +109,7 @@ func (s *SimpleGenerator) Generate(wg *sync.WaitGroup, spans chan *Span, stop ch
 			return
 		default:
 			// generate a trace
-			trace := s.generate_root([]*Span{}, s.opts.Depth, s.opts.SpanCount, s.opts.Duration)
-			// send it to the channel
-			for _, sp := range trace {
-				spans <- sp
-			}
+			s.generate_root(spans, depth, spanCount, duration)
 		}
 	}
 }

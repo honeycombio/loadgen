@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"sync"
-	"time"
 
 	"github.com/honeycombio/libhoney-go"
 )
@@ -80,10 +79,6 @@ func (h *HoneycombSender) Run(wg *sync.WaitGroup, spans chan *Span, stop chan st
 	}()
 }
 
-func f(ts time.Time) string {
-	return ts.Format("15:04:05.000")
-}
-
 func (h *HoneycombSender) send(span *Span) {
 	event := h.builder.NewEvent()
 	event.Timestamp = span.StartTime
@@ -103,6 +98,5 @@ func (h *HoneycombSender) send(span *Span) {
 	for k, v := range span.Fields {
 		event.AddField(k, v)
 	}
-	fmt.Printf("ts:%v T:%s S:%s P%16s start:%v end:%v\n", f(event.Timestamp), span.TraceId, span.SpanId, span.ParentId, f(span.StartTime), f(span.EndTime))
 	event.Send()
 }

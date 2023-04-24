@@ -17,6 +17,7 @@ func NewOTelHoneySender(dataset, apiKey, apiHost string, insecure bool) *OTelHon
 }
 
 func (h *OTelHoneySender) Run(wg *sync.WaitGroup, spans chan *Span, stop chan struct{}) {
+	wg.Add(1)
 	defer wg.Done()
 	go func() {
 		for {
