@@ -7,22 +7,33 @@ import (
 	"time"
 )
 
+// A Generator generates traces and sends them to the spans channel. Its
+// Generate method should be run in a goroutine, and generates a single trace,
+// taking opts.Duration to do so. Its TPS method returns the number of traces
+// per second it is currently generating.
 type Generator interface {
-	Generate(spans chan *Span, stop chan struct{})
+	Generate(opts Options, wg *sync.WaitGroup, spans chan *Span, stop chan struct{})
+	TPS() float64
 }
 
 type TraceGenerator struct {
 	depth     int
 	spanCount int
 	duration  time.Duration
+	chans     []chan struct{}
 	mut       sync.RWMutex
 }
 
+// make sure it implements Generator
+var _ Generator = (*TraceGenerator)(nil)
+
 func NewTraceGenerator(opts Options) *TraceGenerator {
+	chans := make([]chan struct{}, 0)
 	return &TraceGenerator{
 		depth:     opts.Depth,
 		spanCount: opts.SpanCount,
 		duration:  opts.Duration,
+		chans:     chans,
 	}
 }
 
@@ -94,22 +105,97 @@ func (s *TraceGenerator) generate_root(spans chan *Span, depth int, spancount in
 	spans <- root
 }
 
-func (s *TraceGenerator) Generate(wg *sync.WaitGroup, spans chan *Span, stop chan struct{}) {
-	s.mut.RLock()
+// generator is a single goroutine that generates traces and sends them to the spans channel.
+// It runs until the stop channel is closed.
+// The trace time is determined by the duration, and as soon as one trace is sent the next one is started.
+func (s *TraceGenerator) generator(wg *sync.WaitGroup, spans chan *Span) {
+	s.mut.Lock()
 	depth := s.depth
 	spanCount := s.spanCount
 	duration := s.duration
-	s.mut.RUnlock()
+	stop := make(chan struct{})
+	s.chans = append(s.chans, stop)
+	s.mut.Unlock()
 
 	defer wg.Done()
 	for {
 		select {
 		case <-stop:
-			fmt.Println("stopping generator")
 			return
 		default:
 			// generate a trace
 			s.generate_root(spans, depth, spanCount, duration)
 		}
 	}
+}
+
+type GeneratorState int
+
+const (
+	Starting GeneratorState = iota
+	Running
+	Stopping
+)
+
+func (s *TraceGenerator) Generate(opts Options, wg *sync.WaitGroup, spans chan *Span, stop chan struct{}) {
+	defer wg.Done()
+	ngenerators := float64(opts.TPS) / s.TPS()
+	uSgeneratorInterval := float64(opts.Ramp.Microseconds()) / ngenerators
+	generatorInterval := time.Duration(uSgeneratorInterval) * time.Microsecond
+
+	fmt.Println("ngenerators:", ngenerators, "interval:", generatorInterval)
+	state := Starting
+
+	ticker := time.NewTicker(generatorInterval)
+	defer ticker.Stop()
+
+	stopTimer := time.NewTimer(opts.MaxTime)
+	defer stopTimer.Stop()
+
+	for {
+		select {
+		case <-stop:
+			fmt.Println("stopping generators from stop signal")
+			state = Stopping
+			s.mut.Lock()
+			for _, ch := range s.chans {
+				close(ch)
+			}
+			s.mut.Unlock()
+			return
+		case <-ticker.C:
+			switch state {
+			case Starting:
+				if len(s.chans) >= int(ngenerators+0.5) {
+					fmt.Println("switching to Running state")
+					state = Running
+				} else {
+					fmt.Println("starting new generator")
+					wg.Add(1)
+					go s.generator(wg, spans)
+				}
+			case Running:
+				// do nothing
+			case Stopping:
+				s.mut.Lock()
+				if len(s.chans) == 0 {
+					close(stop)
+					return
+				}
+				fmt.Println("killing off a generator")
+				close(s.chans[0])
+				s.chans = s.chans[1:]
+				s.mut.Unlock()
+			}
+		case <-stopTimer.C:
+			fmt.Println("stopping generators from timer")
+			state = Stopping
+		}
+	}
+}
+
+func (s *TraceGenerator) TPS() float64 {
+	s.mut.RLock()
+	defer s.mut.RUnlock()
+	return 1.0 / s.duration.Seconds()
 }

@@ -8,6 +8,9 @@ type OTelHoneySender struct {
 	apiHost string
 }
 
+// make sure it implements Sender
+var _ Sender = (*OTelHoneySender)(nil)
+
 func NewOTelHoneySender(dataset, apiKey, apiHost string, insecure bool) *OTelHoneySender {
 	return &OTelHoneySender{
 		dataset: dataset,

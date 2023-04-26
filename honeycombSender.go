@@ -16,6 +16,9 @@ type HoneycombSender struct {
 	builder  *libhoney.Builder
 }
 
+// make sure it implements Sender
+var _ Sender = (*HoneycombSender)(nil)
+
 func NewHoneycombSender(opts Options, host string) *HoneycombSender {
 	libhoney.Init(libhoney.Config{
 		WriteKey: opts.APIKey,

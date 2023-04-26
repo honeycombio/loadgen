@@ -85,12 +85,11 @@ type Options struct {
 	Depth      int           `long:"depth" description:"the average depth of a trace" default:"3"`
 	SpanCount  int           `long:"spancount" description:"the average number of spans in a trace" default:"3"`
 	SpanWidth  int           `long:"spanwidth" description:"the average number of random fields in a span beyond the standard ones" default:"10"`
-	Duration   time.Duration `long:"duration" description:"the duration of a trace" default:"1s"`
-	MaxTime    int           `long:"maxtime" description:"the maximum time to spend generating traces (0 means no limit)" default:"0"`
-	TPS        int           `long:"tracespersecond" description:"the number of traces to generate per second" default:"1"`
+	TPS        int           `long:"tps" description:"the number of traces to generate per second" default:"1"`
 	TraceCount int           `long:"tracecount" description:"the maximum number of traces to generate (0 means no limit)" default:"1"`
-	Rampup     int           `long:"rampup" description:"the number of seconds to spend ramping up to the desired TPS" default:"0"`
-	Rampdown   int           `long:"rampdown" description:"the number of seconds to spend ramping down to 0 TPS" default:"0"`
+	Duration   time.Duration `long:"duration" description:"the duration of a trace" default:"1s"`
+	MaxTime    time.Duration `long:"maxtime" description:"the maximum time to spend generating traces (0 means no limit)" default:"60s"`
+	Ramp       time.Duration `long:"ramp" description:"seconds to spend ramping up or down to the desired TPS" default:"1s"`
 	Verbose    bool          `long:"verbose" description:"set to print status and progress messages"`
 }
 
@@ -126,6 +125,33 @@ func parseHost(host string, insecure bool) (string, bool) {
 	}
 }
 
+// TraceCounter reads spans from src and writes them to dest, stopping
+// when it has read maxcount spans or when it receives a value on stop.
+// If maxcount is 0, it will run until it receives a value on stop.
+// It returns true if it stopped because of a value on stop, false otherwise.
+func TraceCounter(src, dest chan *Span, maxcount int64, stop chan struct{}) bool {
+	var count int64
+
+	defer func() {
+		fmt.Printf("span counter exiting after %d spans\n", count)
+	}()
+
+	for {
+		select {
+		case <-stop:
+			return true
+		case span := <-src:
+			dest <- span
+			if span.IsRootSpan() {
+				count++
+			}
+			if maxcount > 0 && count >= maxcount {
+				return false
+			}
+		}
+	}
+}
+
 func main() {
 	var args Options
 
@@ -143,6 +169,10 @@ func main() {
 
 	var sender Sender
 	switch args.Sender {
+	case "dummy":
+		sender = NewDummySender()
+	case "stdout":
+		sender = NewStdoutSender()
 	case "honeycomb":
 		sender = NewHoneycombSender(args, host)
 	case "otlp":
@@ -153,30 +183,41 @@ func main() {
 		// 	"x-honeycomb-dataset": args.Dataset,
 		// }
 		sender = NewOTelHoneySender(args.Dataset, args.APIKey, host, insecure)
-	case "stdout":
-		sender = NewStdoutSender()
-	case "dummy":
-		sender = NewDummySender()
 	}
 
-	spans := make(chan *Span, 1000)
+	// create a stop channel so we can shut down gracefully
 	stop := make(chan struct{})
+	// and a waitgroup so we can wait for everything to finish
 	wg := &sync.WaitGroup{}
-	sender.Run(wg, spans, stop)
 
-	// start the load generator
-	generator := NewTraceGenerator(args)
-	wg.Add(1)
-	go generator.Generate(wg, spans, stop)
-
-	// catch ctrl-c and shut down gracefully
+	// catch ctrl-c and close the stop channel
 	sigch := make(chan os.Signal, 1)
 	signal.Notify(sigch, os.Interrupt)
-	wg.Add(1)
+	// wg.Add(1)
 	go func() {
 		<-sigch
 		fmt.Println("\nshutting down")
 		close(stop)
+		// wg.Done()
+	}()
+
+	// start the sender to receive spans and forward them appropriately
+	dest := make(chan *Span, 1000)
+	sender.Run(wg, dest, stop)
+
+	// start the load generator to create spans and send them on the source chan
+	src := make(chan *Span, 1000)
+	var generator Generator = NewTraceGenerator(args)
+	wg.Add(1)
+	go generator.Generate(args, wg, src, stop)
+
+	// start the span counter to keep track of how many spans we've sent
+	// and stop the generator when we've reached the limit
+	wg.Add(1)
+	go func() {
+		if !TraceCounter(src, dest, int64(args.TraceCount), stop) {
+			close(stop)
+		}
 		wg.Done()
 	}()
 

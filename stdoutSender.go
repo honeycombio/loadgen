@@ -11,6 +11,9 @@ type StdoutSender struct {
 	rootspans int
 }
 
+// make sure it implements Sender
+var _ Sender = (*StdoutSender)(nil)
+
 func NewStdoutSender() *StdoutSender {
 	return &StdoutSender{}
 }
@@ -36,7 +39,7 @@ func f(ts time.Time) string {
 }
 
 func (h *StdoutSender) send(span *Span) {
-	if span.ParentId == "" {
+	if span.IsRootSpan() {
 		h.rootspans++
 	}
 	h.spancount++
