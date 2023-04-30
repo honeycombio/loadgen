@@ -6,16 +6,18 @@ type OTelHoneySender struct {
 	dataset string
 	apiKey  string
 	apiHost string
+	log     Logger
 }
 
 // make sure it implements Sender
 var _ Sender = (*OTelHoneySender)(nil)
 
-func NewOTelHoneySender(dataset, apiKey, apiHost string, insecure bool) *OTelHoneySender {
+func NewOTelHoneySender(log Logger, dataset, apiKey, apiHost string, insecure bool) *OTelHoneySender {
 	return &OTelHoneySender{
 		dataset: dataset,
 		apiKey:  apiKey,
 		apiHost: apiHost,
+		log:     log,
 	}
 }
 

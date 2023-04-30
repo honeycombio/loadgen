@@ -20,20 +20,24 @@ type TraceGenerator struct {
 	depth     int
 	spanCount int
 	duration  time.Duration
+	fielder   *Fielder
 	chans     []chan struct{}
 	mut       sync.RWMutex
+	log       Logger
 }
 
 // make sure it implements Generator
 var _ Generator = (*TraceGenerator)(nil)
 
-func NewTraceGenerator(opts Options) *TraceGenerator {
+func NewTraceGenerator(log Logger, opts Options) *TraceGenerator {
 	chans := make([]chan struct{}, 0)
 	return &TraceGenerator{
 		depth:     opts.Depth,
 		spanCount: opts.SpanCount,
 		duration:  opts.Duration,
+		fielder:   NewFielder("test", opts.SpanWidth),
 		chans:     chans,
+		log:       log,
 	}
 }
 
@@ -77,7 +81,7 @@ func (s *TraceGenerator) generate_spans(spans chan *Span, tid, pid string, depth
 			ParentId:    pid,
 			SpanId:      randID(8),
 			StartTime:   time.Now(),
-			Fields:      map[string]interface{}{},
+			Fields:      s.fielder.GetFields(),
 		}
 		s.generate_spans(spans, tid, span.SpanId, depth-1, spancount-nspans, durationPerChild)
 		time.Sleep(durationThisSpan / 2)
@@ -93,6 +97,7 @@ func (s *TraceGenerator) generate_root(spans chan *Span, depth int, spancount in
 		TraceId:     randID(16),
 		SpanId:      randID(8),
 		StartTime:   time.Now(),
+		Fields:      s.fielder.GetFields(),
 	}
 	thisSpanDuration := time.Duration(rand.Intn(int(timeRemaining) / (spancount + 1)))
 	childDuration := (timeRemaining - thisSpanDuration)
@@ -143,7 +148,7 @@ func (s *TraceGenerator) Generate(opts Options, wg *sync.WaitGroup, spans chan *
 	uSgeneratorInterval := float64(opts.Ramp.Microseconds()) / ngenerators
 	generatorInterval := time.Duration(uSgeneratorInterval) * time.Microsecond
 
-	fmt.Println("ngenerators:", ngenerators, "interval:", generatorInterval)
+	s.log.Printf("ngenerators: %f interval: %s\n", ngenerators, generatorInterval)
 	state := Starting
 
 	ticker := time.NewTicker(generatorInterval)
@@ -155,7 +160,7 @@ func (s *TraceGenerator) Generate(opts Options, wg *sync.WaitGroup, spans chan *
 	for {
 		select {
 		case <-stop:
-			fmt.Println("stopping generators from stop signal")
+			s.log.Printf("stopping generators from stop signal\n")
 			state = Stopping
 			s.mut.Lock()
 			for _, ch := range s.chans {
@@ -167,10 +172,10 @@ func (s *TraceGenerator) Generate(opts Options, wg *sync.WaitGroup, spans chan *
 			switch state {
 			case Starting:
 				if len(s.chans) >= int(ngenerators+0.5) {
-					fmt.Println("switching to Running state")
+					s.log.Printf("switching to Running state\n")
 					state = Running
 				} else {
-					fmt.Println("starting new generator")
+					// s.log.Printf("starting new generator\n")
 					wg.Add(1)
 					go s.generator(wg, spans)
 				}
@@ -179,16 +184,17 @@ func (s *TraceGenerator) Generate(opts Options, wg *sync.WaitGroup, spans chan *
 			case Stopping:
 				s.mut.Lock()
 				if len(s.chans) == 0 {
+					s.mut.Unlock()
 					close(stop)
 					return
 				}
-				fmt.Println("killing off a generator")
+				// s.log.Printf("killing off a generator\n")
 				close(s.chans[0])
 				s.chans = s.chans[1:]
 				s.mut.Unlock()
 			}
 		case <-stopTimer.C:
-			fmt.Println("stopping generators from timer")
+			s.log.Printf("stopping generators from timer\n")
 			state = Stopping
 		}
 	}

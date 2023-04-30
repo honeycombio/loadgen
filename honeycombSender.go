@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"os"
 	"sync"
 
@@ -14,22 +13,27 @@ type HoneycombSender struct {
 	apiHost  string
 	maxcount int
 	builder  *libhoney.Builder
+	log      Logger
 }
 
 // make sure it implements Sender
 var _ Sender = (*HoneycombSender)(nil)
 
-func NewHoneycombSender(opts Options, host string) *HoneycombSender {
-	libhoney.Init(libhoney.Config{
+func NewHoneycombSender(log Logger, opts Options, apihost string) (*HoneycombSender, error) {
+	err := libhoney.Init(libhoney.Config{
 		WriteKey: opts.APIKey,
 		Dataset:  opts.Dataset,
-		APIHost:  host,
+		APIHost:  apihost,
+		// Logger:  log,  // uncomment to see libhoney debug logs
 	})
+	if err != nil {
+		return nil, err
+	}
 	builder := libhoney.NewBuilder()
 	host, err := os.Hostname()
 	if err != nil {
 		host = "unknown"
-		fmt.Fprintf(os.Stderr, "unable to determine hostname: %s", err)
+		log.Error("unable to determine hostname: %s, using 'unknown'", err)
 	}
 	builder.AddField("host_name", host)
 	return &HoneycombSender{
@@ -38,7 +42,8 @@ func NewHoneycombSender(opts Options, host string) *HoneycombSender {
 		apiHost:  host,
 		maxcount: opts.TraceCount,
 		builder:  builder,
-	}
+		log:      log,
+	}, nil
 }
 
 func (h *HoneycombSender) Run(wg *sync.WaitGroup, spans chan *Span, stop chan struct{}) {
@@ -51,11 +56,12 @@ func (h *HoneycombSender) Run(wg *sync.WaitGroup, spans chan *Span, stop chan st
 			select {
 			case resp := <-responses:
 				if resp.Err != nil {
-					fmt.Fprintf(os.Stderr, "error sending event -- err: %s  resp: %s", resp.Err, resp.Body)
+					h.log.Error("error sending event -- err: %s  resp: %s", resp.Err, resp.Body)
 				}
-				fmt.Println(resp)
+				// h.log.Printf("%s\n", resp)
 			case <-stop:
-				fmt.Println("stopping logger")
+				libhoney.Close()
+				h.log.Printf("stopping error response logger\n")
 				return
 			}
 		}
@@ -71,11 +77,11 @@ func (h *HoneycombSender) Run(wg *sync.WaitGroup, spans chan *Span, stop chan st
 				count++
 				if h.maxcount > 0 && count >= h.maxcount {
 					close(stop)
-					fmt.Println("stopping sender after maxcount")
+					h.log.Printf("stopping sender after maxcount\n")
 					return
 				}
 			case <-stop:
-				fmt.Println("stopping sender after stop")
+				h.log.Printf("stopping sender after stop\n")
 				return
 			}
 		}
@@ -102,4 +108,5 @@ func (h *HoneycombSender) send(span *Span) {
 		event.AddField(k, v)
 	}
 	event.Send()
+	h.log.Printf("sent event %v\n", event)
 }

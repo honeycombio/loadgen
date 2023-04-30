@@ -1,20 +1,20 @@
 package main
 
 import (
-	"fmt"
 	"sync"
 )
 
 type DummySender struct {
 	spancount int
 	rootspans int
+	log       Logger
 }
 
 // make sure it implements Sender
 var _ Sender = (*DummySender)(nil)
 
-func NewDummySender() *DummySender {
-	return &DummySender{}
+func NewDummySender(log Logger) *DummySender {
+	return &DummySender{log: log}
 }
 
 func (h *DummySender) Run(wg *sync.WaitGroup, spans chan *Span, stop chan struct{}) {
@@ -26,7 +26,7 @@ func (h *DummySender) Run(wg *sync.WaitGroup, spans chan *Span, stop chan struct
 			case span := <-spans:
 				h.send(span)
 			case <-stop:
-				fmt.Printf("sent %d spans with %d root spans\n", h.spancount, h.rootspans)
+				h.log.Printf("sent %d spans with %d root spans\n", h.spancount, h.rootspans)
 				return
 			}
 		}

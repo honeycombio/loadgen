@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 	"os/signal"
 	"sync"
@@ -13,6 +14,35 @@ import (
 
 var ResourceLibrary = "loadgen"
 var ResourceVersion = "dev"
+
+type Logger interface {
+	Printf(format string, v ...interface{})
+	Error(format string, v ...interface{})
+	Fatal(format string, v ...interface{})
+}
+
+type logger struct {
+	verbose bool
+}
+
+func NewLogger(verbose bool) Logger {
+	return &logger{verbose}
+}
+
+func (l *logger) Error(format string, v ...interface{}) {
+	fmt.Fprintf(os.Stderr, format, v...)
+}
+
+func (l *logger) Fatal(format string, v ...interface{}) {
+	fmt.Fprintf(os.Stderr, format, v...)
+	os.Exit(1)
+}
+
+func (l *logger) Printf(format string, v ...interface{}) {
+	if l.verbose {
+		fmt.Printf(format, v...)
+	}
+}
 
 // loadgen generates telemetry loads for performance testing It can generate
 // traces (and eventually metrics and logs) It can send them to honeycomb or to
@@ -65,16 +95,6 @@ var ResourceVersion = "dev"
 
 // If a mix of different kinds of traces is desired, multiple loadgen processes can be run.
 
-// servicenames is a list of common spices
-var servicenames = []string{
-	"allspice", "anise", "basil", "bay", "black pepper", "cardamom", "cayenne",
-	"cinnamon", "cloves", "coriander", "cumin", "curry", "dill", "fennel", "fenugreek",
-	"garlic", "ginger", "marjoram", "mustard", "nutmeg", "oregano", "paprika", "parsley",
-	"pepper", "rosemary", "saffron", "sage", "salt", "tarragon", "thyme", "turmeric", "vanilla",
-	"caraway", "chili", "masala", "lemongrass", "mint", "poppy", "sesame", "sumac", "mace",
-	"nigella", "peppercorn", "wasabi",
-}
-
 type Options struct {
 	Host       string        `long:"host" description:"the url of the host to receive the metrics (or honeycomb, dogfood, localhost)" default:"honeycomb"`
 	Insecure   bool          `long:"insecure" description:"use this for http connections"`
@@ -96,44 +116,47 @@ type Options struct {
 // parses the host information and returns a cleaned-up version to make
 // it easier to make sure that things are properly specified
 // exits if it can't make sense of it
-func parseHost(host string, insecure bool) (string, bool) {
+func parseHost(log Logger, host string, insecure bool) *url.URL {
 	switch host {
 	case "honeycomb":
-		return "api.honeycomb.io:443", false
+		host = "https://api.honeycomb.io:443"
 	case "dogfood":
-		return "api-dogfood.honeycomb.io:443", false
+		host = "https://api-dogfood.honeycomb.io:443"
 	case "localhost":
-		return "localhost:8889", true
+		host = "http://localhost:8889"
 	default:
-		// if the scheme is not specified, fall back to the value of the insecure flag
-		defaultScheme := "https"
-		if insecure {
-			defaultScheme = "http"
-		}
-		u, err := urlx.ParseWithDefaultScheme(host, defaultScheme)
-		if err != nil {
-			fmt.Println(err)
-			os.Exit(1)
-		}
-		port := u.Port()
-		if port == "" {
-			port = "4317" // default GRPC port
-		}
-
-		// it's insecure if it's not https
-		return fmt.Sprintf("%s:%s", u.Hostname(), u.Port()), u.Scheme != "https"
 	}
+
+	// if the scheme is not specified, fall back to the value of the insecure flag
+	defaultScheme := "https"
+	if insecure {
+		defaultScheme = "http"
+	}
+	u, err := urlx.ParseWithDefaultScheme(host, defaultScheme)
+	if err != nil {
+		log.Fatal("unable to parse host: %s\n", err)
+	}
+	port := u.Port()
+	if port == "" {
+		port = "4317" // default GRPC port
+	}
+	return u
+}
+
+func formatURLForGRPC(u *url.URL) (string, bool) {
+	// it's insecure if it's not https
+	return fmt.Sprintf("%s:%s", u.Hostname(), u.Port()), u.Scheme != "https"
 }
 
 // TraceCounter reads spans from src and writes them to dest, stopping
 // when it has read maxcount spans or when it receives a value on stop.
 // If maxcount is 0, it will run until it receives a value on stop.
 // It returns true if it stopped because of a value on stop, false otherwise.
-func TraceCounter(src, dest chan *Span, maxcount int64, stop chan struct{}) bool {
+func TraceCounter(log Logger, src, dest chan *Span, maxcount int64, stop chan struct{}) bool {
 	var count int64
 
 	defer func() {
-		fmt.Printf("span counter exiting after %d spans\n", count)
+		log.Printf("span counter exiting after %d spans\n", count)
 	}()
 
 	for {
@@ -155,26 +178,37 @@ func TraceCounter(src, dest chan *Span, maxcount int64, stop chan struct{}) bool
 func main() {
 	var args Options
 
-	_, err := flags.Parse(&args)
-	if err != nil {
-		// fmt.Println(err)
-		os.Exit(1)
+	parser := flags.NewParser(&args, flags.Default)
+
+	if _, err := parser.Parse(); err != nil {
+		switch flagsErr := err.(type) {
+		case *flags.Error:
+			if flagsErr.Type == flags.ErrHelp {
+				os.Exit(0)
+			}
+			os.Exit(1)
+		default:
+			os.Exit(1)
+		}
 	}
 
-	host, insecure := parseHost(args.Host, args.Insecure)
+	log := NewLogger(args.Verbose)
+	u := parseHost(log, args.Host, args.Insecure)
 
-	if args.Verbose {
-		fmt.Printf("host: %s, dataset: %s, apikey: %s, insecure: %t\n\n", host, args.Dataset, args.APIKey, insecure)
-	}
+	log.Printf("host: %s, dataset: %s, apikey: %s\n\n", u.String(), args.Dataset, args.APIKey)
 
 	var sender Sender
 	switch args.Sender {
 	case "dummy":
-		sender = NewDummySender()
+		sender = NewDummySender(log)
 	case "stdout":
-		sender = NewStdoutSender()
+		sender = NewStdoutSender(log)
 	case "honeycomb":
-		sender = NewHoneycombSender(args, host)
+		var err error
+		sender, err = NewHoneycombSender(log, args, u.String())
+		if err != nil {
+			log.Fatal("error configuring honeycomb sender: %s\n", err)
+		}
 	case "otlp":
 		// ctx := context.Background()
 
@@ -182,7 +216,8 @@ func main() {
 		// 	"x-honeycomb-team":    args.APIKey,
 		// 	"x-honeycomb-dataset": args.Dataset,
 		// }
-		sender = NewOTelHoneySender(args.Dataset, args.APIKey, host, insecure)
+		host, insecure := formatURLForGRPC(u)
+		sender = NewOTelHoneySender(log, args.Dataset, args.APIKey, host, insecure)
 	}
 
 	// create a stop channel so we can shut down gracefully
@@ -196,7 +231,7 @@ func main() {
 	// wg.Add(1)
 	go func() {
 		<-sigch
-		fmt.Println("\nshutting down")
+		log.Printf("\nshutting down\n")
 		close(stop)
 		// wg.Done()
 	}()
@@ -207,7 +242,7 @@ func main() {
 
 	// start the load generator to create spans and send them on the source chan
 	src := make(chan *Span, 1000)
-	var generator Generator = NewTraceGenerator(args)
+	var generator Generator = NewTraceGenerator(log, args)
 	wg.Add(1)
 	go generator.Generate(args, wg, src, stop)
 
@@ -215,7 +250,7 @@ func main() {
 	// and stop the generator when we've reached the limit
 	wg.Add(1)
 	go func() {
-		if !TraceCounter(src, dest, int64(args.TraceCount), stop) {
+		if !TraceCounter(log, src, dest, int64(args.TraceCount), stop) {
 			close(stop)
 		}
 		wg.Done()
