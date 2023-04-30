@@ -5,6 +5,12 @@ import (
 	"os"
 )
 
+type Logger interface {
+	Printf(format string, v ...interface{})
+	Error(format string, v ...interface{})
+	Fatal(format string, v ...interface{})
+}
+
 type logger struct {
 	verbose bool
 }
