@@ -1,22 +1,16 @@
 package main
 
 import (
-	"fmt"
+	"context"
 	"math/rand"
 	"sync"
 	"time"
+
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/trace"
 )
 
-// A Generator generates traces and sends the individual spans to the spans channel. Its
-// Generate method should be run in a goroutine, and generates a single trace,
-// taking opts.Duration to do so. Its TPS method returns the number of traces
-// per second it is currently generating.
-type Generator interface {
-	Generate(opts Options, wg *sync.WaitGroup, spans chan *Span, stop chan struct{})
-	TPS() float64
-}
-
-type TraceGenerator struct {
+type OTelTraceGenerator struct {
 	depth     int
 	spanCount int
 	duration  time.Duration
@@ -24,30 +18,23 @@ type TraceGenerator struct {
 	chans     []chan struct{}
 	mut       sync.RWMutex
 	log       Logger
+	tracer    trace.Tracer
 }
 
 // make sure it implements Generator
-var _ Generator = (*TraceGenerator)(nil)
+var _ Generator = (*OTelTraceGenerator)(nil)
 
-func NewTraceGenerator(log Logger, opts Options) *TraceGenerator {
+func NewOTelTraceGenerator(log Logger, opts Options) *OTelTraceGenerator {
 	chans := make([]chan struct{}, 0)
-	return &TraceGenerator{
+	return &OTelTraceGenerator{
 		depth:     opts.Format.Depth,
 		spanCount: opts.Format.SpanCount,
 		duration:  opts.Format.Duration,
 		fielder:   NewFielder("test", opts.Format.SpanWidth),
 		chans:     chans,
 		log:       log,
+		tracer:    otel.Tracer("test"),
 	}
-}
-
-// randID creates a random byte array of length l and returns it as a hex string.
-func randID(l int) string {
-	id := make([]byte, l)
-	for i := 0; i < l; i++ {
-		id[i] = byte(rand.Intn(256))
-	}
-	return fmt.Sprintf("%x", id)
 }
 
 // generate_spans generates a list of spans with the given depth and spancount
@@ -56,7 +43,7 @@ func randID(l int) string {
 // - spancount is the average number of spans in a trace.
 // If spancount is less than depth, the trace will be truncated at spancount.
 // If spancount is greater than depth, some of the children will have siblings.
-func (s *TraceGenerator) generate_spans(spans chan *Span, tid, pid string, depth int, spancount int, timeRemaining time.Duration) {
+func (s *OTelTraceGenerator) generate_spans(ctx context.Context, depth int, spancount int, timeRemaining time.Duration) {
 	if depth == 0 {
 		return
 	}
@@ -75,45 +62,31 @@ func (s *TraceGenerator) generate_spans(spans chan *Span, tid, pid string, depth
 		durationThisSpan := durationRemaining / time.Duration(nspans-i)
 		durationRemaining -= durationThisSpan
 		time.Sleep(durationThisSpan / 2)
-		span := &Span{
-			ServiceName: "test",
-			TraceId:     tid,
-			ParentId:    pid,
-			SpanId:      randID(8),
-			StartTime:   time.Now(),
-			Fields:      s.fielder.GetFields(),
-		}
-		s.generate_spans(spans, tid, span.SpanId, depth-1, spancount-nspans, durationPerChild)
+		span := trace.SpanFromContext(ctx)
+		s.fielder.AddFields(span)
+		s.generate_spans(ctx, depth-1, spancount-nspans, durationPerChild)
 		time.Sleep(durationThisSpan / 2)
-		span.EndTime = time.Now()
-		span.Duration = span.EndTime.Sub(span.StartTime)
-		spans <- span
+		span.End()
 	}
 }
 
-func (s *TraceGenerator) generate_root(spans chan *Span, depth int, spancount int, timeRemaining time.Duration) {
-	root := &Span{
-		ServiceName: "test",
-		TraceId:     randID(16),
-		SpanId:      randID(8),
-		StartTime:   time.Now(),
-		Fields:      s.fielder.GetFields(),
-	}
+func (s *OTelTraceGenerator) generate_root(depth int, spancount int, timeRemaining time.Duration) {
+	ctx := context.Background()
+	ctx, root := s.tracer.Start(ctx, "root")
+	s.fielder.AddFields(root)
 	thisSpanDuration := time.Duration(rand.Intn(int(timeRemaining) / (spancount + 1)))
 	childDuration := (timeRemaining - thisSpanDuration)
 
 	time.Sleep(thisSpanDuration / 2)
-	s.generate_spans(spans, root.TraceId, root.SpanId, depth-1, spancount-1, childDuration)
+	s.generate_spans(ctx, depth-1, spancount-1, childDuration)
 	time.Sleep(thisSpanDuration / 2)
-	root.EndTime = time.Now()
-	root.Duration = root.EndTime.Sub(root.StartTime)
-	spans <- root
+	root.End()
 }
 
 // generator is a single goroutine that generates traces and sends them to the spans channel.
 // It runs until the stop channel is closed.
 // The trace time is determined by the duration, and as soon as one trace is sent the next one is started.
-func (s *TraceGenerator) generator(wg *sync.WaitGroup, spans chan *Span) {
+func (s *OTelTraceGenerator) generator(wg *sync.WaitGroup) {
 	s.mut.Lock()
 	depth := s.depth
 	spanCount := s.spanCount
@@ -131,20 +104,12 @@ func (s *TraceGenerator) generator(wg *sync.WaitGroup, spans chan *Span) {
 			return
 		case <-ticker.C:
 			// generate a trace
-			s.generate_root(spans, depth, spanCount, duration)
+			s.generate_root(depth, spanCount, duration)
 		}
 	}
 }
 
-type GeneratorState int
-
-const (
-	Starting GeneratorState = iota
-	Running
-	Stopping
-)
-
-func (s *TraceGenerator) Generate(opts Options, wg *sync.WaitGroup, spans chan *Span, stop chan struct{}) {
+func (s *OTelTraceGenerator) Generate(opts Options, wg *sync.WaitGroup, spans chan *Span, stop chan struct{}) {
 	defer wg.Done()
 	ngenerators := float64(opts.Quantity.TPS) / s.TPS()
 	uSgeneratorInterval := float64(opts.Quantity.Ramp.Microseconds()) / ngenerators
@@ -179,7 +144,7 @@ func (s *TraceGenerator) Generate(opts Options, wg *sync.WaitGroup, spans chan *
 				} else {
 					// s.log.Printf("starting new generator\n")
 					wg.Add(1)
-					go s.generator(wg, spans)
+					go s.generator(wg)
 				}
 			case Running:
 				// do nothing
@@ -202,7 +167,7 @@ func (s *TraceGenerator) Generate(opts Options, wg *sync.WaitGroup, spans chan *
 	}
 }
 
-func (s *TraceGenerator) TPS() float64 {
+func (s *OTelTraceGenerator) TPS() float64 {
 	s.mut.RLock()
 	defer s.mut.RUnlock()
 	return 1.0 / s.duration.Seconds()

@@ -152,7 +152,12 @@ func main() {
 
 	// start the load generator to create spans and send them on the source chan
 	src := make(chan *Span, 1000)
-	var generator Generator = NewTraceGenerator(log, args)
+	var generator Generator
+	if args.Sender == "otel" {
+		generator = NewOTelTraceGenerator(log, args)
+	} else {
+		generator = NewTraceGenerator(log, args)
+	}
 	wg.Add(1)
 	go generator.Generate(args, wg, src, stop)
 

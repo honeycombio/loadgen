@@ -5,6 +5,8 @@ import (
 	"runtime"
 
 	"github.com/dgryski/go-wyhash"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // servicenames is a list of common spices
@@ -52,8 +54,8 @@ func NewRng(s string) Rng {
 	return Rng{rand.New(rand.NewSource(int64(wyhash.Hash([]byte(s), 2467825690))))}
 }
 
-func (r Rng) Intn(n int) int {
-	return r.rng.Intn(n)
+func (r Rng) Intn(n int) int64 {
+	return int64(r.rng.Intn(n))
 }
 
 func (r Rng) Choice(a []string) string {
@@ -64,8 +66,8 @@ func (r Rng) Bool() bool {
 	return r.Intn(2) == 0
 }
 
-func (r Rng) Int(min, max int) int {
-	return r.rng.Intn(max-min) + min
+func (r Rng) Int(min, max int) int64 {
+	return int64(r.rng.Intn((max - min) + min))
 }
 
 func (r Rng) Float(min, max float64) float64 {
@@ -155,4 +157,21 @@ func (f *Fielder) GetFields() map[string]any {
 		fields[k] = v()
 	}
 	return fields
+}
+
+func (f *Fielder) AddFields(span trace.Span) {
+	for key, val := range f.fields {
+		switch v := val().(type) {
+		case int64:
+			span.SetAttributes(attribute.Int64(key, v))
+		case float64:
+			span.SetAttributes(attribute.Float64(key, v))
+		case string:
+			span.SetAttributes(attribute.String(key, v))
+		case bool:
+			span.SetAttributes(attribute.Bool(key, v))
+		default:
+			panic("unknown type -- implementation error in fielder.go")
+		}
+	}
 }
