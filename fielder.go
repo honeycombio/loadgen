@@ -2,6 +2,7 @@ package main
 
 import (
 	"math/rand"
+	"runtime"
 
 	"github.com/dgryski/go-wyhash"
 )
@@ -79,6 +80,33 @@ func (r Rng) GaussianInt(mean, stddev float64) int64 {
 	return int64(r.rng.NormFloat64()*stddev + mean)
 }
 
+func getGoroutineID() uint64 {
+	var buffer [31]byte
+	written := runtime.Stack(buffer[:], false)
+	index := 10
+	negative := buffer[index] == '-'
+	if negative {
+		index = 11
+	}
+	id := uint64(0)
+	for index < written {
+		byte := buffer[index]
+		if byte == ' ' {
+			break
+		}
+		if byte < '0' || byte > '9' {
+			panic("could not get goroutine ID")
+		}
+		id *= 10
+		id += uint64(byte - '0')
+		index++
+	}
+	if negative {
+		id = -id
+	}
+	return id
+}
+
 // #   - int (rectangular min/max)
 // #   - int (gaussian mean/stddev)
 // #   - int upcounter
@@ -117,6 +145,7 @@ func NewFielder(name string, count int) *Fielder {
 		fieldname := rng.Choice(adjectives) + "-" + rng.Choice(nouns)
 		fields[fieldname] = gens[rng.Intn(len(gens))]
 	}
+	fields["goroutine_id"] = func() any { return getGoroutineID() }
 	return &Fielder{fields}
 }
 
