@@ -5,20 +5,20 @@ import (
 	"time"
 )
 
-type StdoutSender struct {
+type PrintSender struct {
 	spancount int
 	rootspans int
 	log       Logger
 }
 
 // make sure it implements Sender
-var _ Sender = (*StdoutSender)(nil)
+var _ Sender = (*PrintSender)(nil)
 
-func NewStdoutSender(log Logger) *StdoutSender {
-	return &StdoutSender{log: log}
+func NewPrintSender(log Logger) *PrintSender {
+	return &PrintSender{log: log}
 }
 
-func (h *StdoutSender) Run(wg *sync.WaitGroup, spans chan *Span, stop chan struct{}) {
+func (h *PrintSender) Run(wg *sync.WaitGroup, spans chan *Span, stop chan struct{}) {
 	wg.Add(1)
 	defer wg.Done()
 	go func() {
@@ -38,7 +38,7 @@ func f(ts time.Time) string {
 	return ts.Format("15:04:05.000")
 }
 
-func (h *StdoutSender) send(span *Span) {
+func (h *PrintSender) send(span *Span) {
 	if span.IsRootSpan() {
 		h.rootspans++
 	}

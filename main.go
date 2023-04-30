@@ -18,7 +18,7 @@ var ResourceVersion = "dev"
 type Options struct {
 	Host       string        `long:"host" description:"the url of the host to receive the metrics (or honeycomb, dogfood, localhost)" default:"honeycomb"`
 	Insecure   bool          `long:"insecure" description:"use this for http connections"`
-	Sender     string        `long:"sender" description:"type of sender (honeycomb, otlp, stdout, dummy)" default:"honeycomb"`
+	Sender     string        `long:"sender" description:"type of sender" choice:"honeycomb" choice:"otel" choice:"print" choice:"dummy" default:"honeycomb"`
 	Dataset    string        `long:"dataset" description:"if set, sends all traces to the given dataset; otherwise, sends them to the dataset named for the service"`
 	APIKey     string        `long:"apikey" description:"the honeycomb API key"`
 	NServices  int           `long:"nservices" description:"the number of services to simulate" default:"1"`
@@ -94,15 +94,15 @@ func main() {
 	switch args.Sender {
 	case "dummy":
 		sender = NewDummySender(log)
-	case "stdout":
-		sender = NewStdoutSender(log)
+	case "print":
+		sender = NewPrintSender(log)
 	case "honeycomb":
 		var err error
 		sender, err = NewHoneycombSender(log, args, u.String())
 		if err != nil {
 			log.Fatal("error configuring honeycomb sender: %s\n", err)
 		}
-	case "otlp":
+	case "otel":
 		// ctx := context.Background()
 
 		// var headers = map[string]string{
