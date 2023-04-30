@@ -21,29 +21,6 @@ type Logger interface {
 	Fatal(format string, v ...interface{})
 }
 
-type logger struct {
-	verbose bool
-}
-
-func NewLogger(verbose bool) Logger {
-	return &logger{verbose}
-}
-
-func (l *logger) Error(format string, v ...interface{}) {
-	fmt.Fprintf(os.Stderr, format, v...)
-}
-
-func (l *logger) Fatal(format string, v ...interface{}) {
-	fmt.Fprintf(os.Stderr, format, v...)
-	os.Exit(1)
-}
-
-func (l *logger) Printf(format string, v ...interface{}) {
-	if l.verbose {
-		fmt.Printf(format, v...)
-	}
-}
-
 type Options struct {
 	Host       string        `long:"host" description:"the url of the host to receive the metrics (or honeycomb, dogfood, localhost)" default:"honeycomb"`
 	Insecure   bool          `long:"insecure" description:"use this for http connections"`
