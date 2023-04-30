@@ -21,8 +21,8 @@ var _ Sender = (*HoneycombSender)(nil)
 
 func NewHoneycombSender(log Logger, opts Options, apihost string) (*HoneycombSender, error) {
 	err := libhoney.Init(libhoney.Config{
-		WriteKey: opts.APIKey,
-		Dataset:  opts.Dataset,
+		WriteKey: opts.Telemetry.APIKey,
+		Dataset:  opts.Telemetry.Dataset,
 		APIHost:  apihost,
 		// Logger:  log,  // uncomment to see libhoney debug logs
 	})
@@ -37,10 +37,10 @@ func NewHoneycombSender(log Logger, opts Options, apihost string) (*HoneycombSen
 	}
 	builder.AddField("host_name", host)
 	return &HoneycombSender{
-		dataset:  opts.Dataset,
-		apiKey:   opts.APIKey,
+		dataset:  opts.Telemetry.Dataset,
+		apiKey:   opts.Telemetry.APIKey,
 		apiHost:  host,
-		maxcount: opts.TraceCount,
+		maxcount: opts.Quantity.TraceCount,
 		builder:  builder,
 		log:      log,
 	}, nil

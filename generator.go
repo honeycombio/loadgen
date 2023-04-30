@@ -32,10 +32,10 @@ var _ Generator = (*TraceGenerator)(nil)
 func NewTraceGenerator(log Logger, opts Options) *TraceGenerator {
 	chans := make([]chan struct{}, 0)
 	return &TraceGenerator{
-		depth:     opts.Depth,
-		spanCount: opts.SpanCount,
-		duration:  opts.Duration,
-		fielder:   NewFielder("test", opts.SpanWidth),
+		depth:     opts.Format.Depth,
+		spanCount: opts.Format.SpanCount,
+		duration:  opts.Format.Duration,
+		fielder:   NewFielder("test", opts.Format.SpanWidth),
 		chans:     chans,
 		log:       log,
 	}
@@ -144,8 +144,8 @@ const (
 
 func (s *TraceGenerator) Generate(opts Options, wg *sync.WaitGroup, spans chan *Span, stop chan struct{}) {
 	defer wg.Done()
-	ngenerators := float64(opts.TPS) / s.TPS()
-	uSgeneratorInterval := float64(opts.Ramp.Microseconds()) / ngenerators
+	ngenerators := float64(opts.Quantity.TPS) / s.TPS()
+	uSgeneratorInterval := float64(opts.Quantity.Ramp.Microseconds()) / ngenerators
 	generatorInterval := time.Duration(uSgeneratorInterval) * time.Microsecond
 
 	s.log.Printf("ngenerators: %f interval: %s\n", ngenerators, generatorInterval)
@@ -154,7 +154,7 @@ func (s *TraceGenerator) Generate(opts Options, wg *sync.WaitGroup, spans chan *
 	ticker := time.NewTicker(generatorInterval)
 	defer ticker.Stop()
 
-	stopTimer := time.NewTimer(opts.MaxTime)
+	stopTimer := time.NewTimer(opts.Quantity.MaxTime)
 	defer stopTimer.Stop()
 
 	for {

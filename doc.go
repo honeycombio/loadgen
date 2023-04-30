@@ -1,6 +1,6 @@
 package main
 
-// loadgen generates telemetry loads for performance testing It can generate
+// loadgen generates telemetry loads for performance testing. It can generate
 // traces (and eventually metrics and logs) It can send them to honeycomb or to
 // a local agent, and it can generate OTLP or Honeycomb-formatted traces. It's
 // highly configurable:
