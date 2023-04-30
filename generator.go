@@ -122,12 +122,14 @@ func (s *TraceGenerator) generator(wg *sync.WaitGroup, spans chan *Span) {
 	s.chans = append(s.chans, stop)
 	s.mut.Unlock()
 
+	ticker := time.NewTicker(duration)
 	defer wg.Done()
 	for {
 		select {
 		case <-stop:
+			ticker.Stop()
 			return
-		default:
+		case <-ticker.C:
 			// generate a trace
 			s.generate_root(spans, depth, spanCount, duration)
 		}
@@ -171,7 +173,7 @@ func (s *TraceGenerator) Generate(opts Options, wg *sync.WaitGroup, spans chan *
 		case <-ticker.C:
 			switch state {
 			case Starting:
-				if len(s.chans) >= int(ngenerators+0.5) {
+				if len(s.chans) >= int(ngenerators+0.5) { // make sure we don't get bit by floating point rounding
 					s.log.Printf("switching to Running state\n")
 					state = Running
 				} else {
