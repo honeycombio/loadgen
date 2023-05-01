@@ -81,43 +81,9 @@ func (t *SenderOTel) CreateTrace(ctx context.Context, name string, fielder *Fiel
 }
 
 func (t *SenderOTel) CreateSpan(ctx context.Context, name string, fielder *Fielder) (context.Context, Sendable) {
-	span := trace.SpanFromContext(ctx)
+	ctx, span := t.tracer.Start(ctx, name)
 	fielder.AddFields(span, 0)
 	var ots OTelSendable
 	ots.Span = span
 	return ctx, ots
 }
-
-// type OTelHoneySender struct {
-// 	dataset string
-// 	apiKey  string
-// 	apiHost string
-// 	log     Logger
-// }
-
-// func NewOTelHoneySender(log Logger, dataset, apiKey, apiHost string, insecure bool) *OTelHoneySender {
-// 	return &OTelHoneySender{
-// 		dataset: dataset,
-// 		apiKey:  apiKey,
-// 		apiHost: apiHost,
-// 		log:     log,
-// 	}
-// }
-
-// func (h *OTelHoneySender) Run(wg *sync.WaitGroup, spans chan *Span, stop chan struct{}) {
-// 	wg.Add(1)
-// 	defer wg.Done()
-// 	go func() {
-// 		for {
-// 			select {
-// 			case span := <-spans:
-// 				h.send(span)
-// 			case <-stop:
-// 				return
-// 			}
-// 		}
-// 	}()
-// }
-
-// func (h *OTelHoneySender) send(span *Span) {
-// }
