@@ -61,7 +61,7 @@ func (h *HoneycombSender) Run(wg *sync.WaitGroup, spans chan *Span, stop chan st
 				// h.log.Printf("%s\n", resp)
 			case <-stop:
 				libhoney.Close()
-				h.log.Printf("stopping error response logger\n")
+				h.log.Info("stopping error response logger\n")
 				return
 			}
 		}
@@ -74,7 +74,7 @@ func (h *HoneycombSender) Run(wg *sync.WaitGroup, spans chan *Span, stop chan st
 			case span := <-spans:
 				h.send(span)
 			case <-stop:
-				h.log.Printf("stopping sender after stop\n")
+				h.log.Info("stopping sender after stop\n")
 				return
 			}
 		}
@@ -101,5 +101,5 @@ func (h *HoneycombSender) send(span *Span) {
 		event.AddField(k, v)
 	}
 	event.Send()
-	h.log.Printf("sent event %v\n", event)
+	h.log.Info("sent event %v\n", event)
 }

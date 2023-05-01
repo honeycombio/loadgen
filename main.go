@@ -36,7 +36,7 @@ type Options struct {
 		Ramp       time.Duration `long:"ramp" description:"seconds to spend ramping up or down to the desired TPS" default:"1s"`
 	} `group:"Quantity Options"`
 	Sender  string `long:"sender" description:"type of sender" choice:"honeycomb" choice:"otel" choice:"print" choice:"dummy" default:"honeycomb"`
-	Verbose bool   `long:"verbose" description:"print status and progress messages"`
+	Verbose []bool `short:"v" long:"verbose" description:"level of verbosity - can use more than once (default silent)"`
 }
 
 // parses the host information and returns a cleaned-up version to make
@@ -105,7 +105,7 @@ func main() {
 	log := NewLogger(args.Verbose)
 	u := parseHost(log, args.Telemetry.Host, args.Telemetry.Insecure)
 
-	log.Printf("host: %s, dataset: %s, apikey: %s\n\n", u.String(), args.Telemetry.Dataset, args.Telemetry.APIKey)
+	log.Info("host: %s, dataset: %s, apikey: ...%4.4s\n", u.String(), args.Telemetry.Dataset, args.Telemetry.APIKey)
 
 	var traceSender TraceSender
 	var sender Sender
@@ -115,6 +115,7 @@ func main() {
 		traceSender = NewTraceSenderDummy(args)
 	case "print":
 		sender = NewPrintSender(log)
+		traceSender = NewTraceSenderPrint(log, args)
 	case "honeycomb":
 		var err error
 		sender, err = NewHoneycombSender(log, args, u.String())
@@ -145,7 +146,7 @@ func main() {
 	// wg.Add(1)
 	go func() {
 		<-sigch
-		log.Printf("\nshutting down\n")
+		log.Info("\nshutting down\n")
 		close(stop)
 		// wg.Done()
 	}()

@@ -109,21 +109,52 @@ func (t *TraceSenderOTel) CreateSpan(ctx context.Context, name string, fielder *
 	return ctx, ots
 }
 
+type DummySendable struct{}
+
+func (s DummySendable) Send() {
+}
+
 type TraceSenderDummy struct{}
 
-func (t TraceSenderDummy) Send() {}
-
 func NewTraceSenderDummy(opts Options) TraceSender {
-	return TraceSenderDummy{}
+	return &TraceSenderDummy{}
 }
 
-func (t TraceSenderDummy) Close() {
+func (t *TraceSenderDummy) Close() {
 }
 
-func (t TraceSenderDummy) CreateTrace(ctx context.Context, name string, fielder *Fielder, count int64) (context.Context, Sendable) {
-	return ctx, TraceSenderDummy{}
+func (t *TraceSenderDummy) CreateTrace(ctx context.Context, name string, fielder *Fielder, count int64) (context.Context, Sendable) {
+	return ctx, DummySendable{}
 }
 
-func (t TraceSenderDummy) CreateSpan(ctx context.Context, name string, fielder *Fielder) (context.Context, Sendable) {
-	return ctx, TraceSenderDummy{}
+func (t *TraceSenderDummy) CreateSpan(ctx context.Context, name string, fielder *Fielder) (context.Context, Sendable) {
+	return ctx, DummySendable{}
+}
+
+type TraceSenderPrint struct {
+	spancount int
+	rootspans int
+	log       Logger
+}
+
+func NewTraceSenderPrint(log Logger, opts Options) TraceSender {
+	return &TraceSenderPrint{
+		log: log,
+	}
+}
+
+func (t *TraceSenderPrint) Close() {
+	t.log.Info("tracesender sent %d spans with %d root spans %p\n", t.spancount, t.rootspans, t)
+}
+
+func (t *TraceSenderPrint) CreateTrace(ctx context.Context, name string, fielder *Fielder, count int64) (context.Context, Sendable) {
+	t.log.Debug("CreateTrace: %s %p\n", name, t)
+	t.rootspans++
+	t.spancount++
+	return ctx, DummySendable{}
+}
+
+func (t *TraceSenderPrint) CreateSpan(ctx context.Context, name string, fielder *Fielder) (context.Context, Sendable) {
+	t.spancount++
+	return ctx, DummySendable{}
 }

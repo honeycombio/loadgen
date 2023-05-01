@@ -27,7 +27,7 @@ func (h *PrintSender) Run(wg *sync.WaitGroup, spans chan *Span, stop chan struct
 			case span := <-spans:
 				h.send(span)
 			case <-stop:
-				h.log.Printf("sent %d spans with %d root spans\n", h.spancount, h.rootspans)
+				h.log.Info("sent %d spans with %d root spans\n", h.spancount, h.rootspans)
 				return
 			}
 		}

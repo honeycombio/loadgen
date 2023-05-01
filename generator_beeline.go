@@ -133,7 +133,7 @@ func (s *BeelineTraceGenerator) Generate(opts Options, wg *sync.WaitGroup, spans
 	uSgeneratorInterval := float64(opts.Quantity.Ramp.Microseconds()) / ngenerators
 	generatorInterval := time.Duration(uSgeneratorInterval) * time.Microsecond
 
-	s.log.Printf("ngenerators: %f interval: %s\n", ngenerators, generatorInterval)
+	s.log.Info("ngenerators: %f interval: %s\n", ngenerators, generatorInterval)
 	state := Starting
 
 	ticker := time.NewTicker(generatorInterval)
@@ -145,7 +145,7 @@ func (s *BeelineTraceGenerator) Generate(opts Options, wg *sync.WaitGroup, spans
 	for {
 		select {
 		case <-stop:
-			s.log.Printf("stopping generators from stop signal\n")
+			s.log.Info("stopping generators from stop signal\n")
 			state = Stopping
 			s.mut.Lock()
 			for _, ch := range s.chans {
@@ -157,7 +157,7 @@ func (s *BeelineTraceGenerator) Generate(opts Options, wg *sync.WaitGroup, spans
 			switch state {
 			case Starting:
 				if len(s.chans) >= int(ngenerators+0.5) { // make sure we don't get bit by floating point rounding
-					s.log.Printf("switching to Running state\n")
+					s.log.Info("switching to Running state\n")
 					state = Running
 				} else {
 					// s.log.Printf("starting new generator\n")
@@ -179,7 +179,7 @@ func (s *BeelineTraceGenerator) Generate(opts Options, wg *sync.WaitGroup, spans
 				s.mut.Unlock()
 			}
 		case <-stopTimer.C:
-			s.log.Printf("stopping generators from timer\n")
+			s.log.Info("stopping generators from timer\n")
 			state = Stopping
 		}
 	}
