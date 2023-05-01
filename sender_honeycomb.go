@@ -11,7 +11,7 @@ type HoneycombSender struct {
 	dataset  string
 	apiKey   string
 	apiHost  string
-	maxcount int
+	maxcount int64
 	builder  *libhoney.Builder
 	log      Logger
 }
@@ -69,17 +69,10 @@ func (h *HoneycombSender) Run(wg *sync.WaitGroup, spans chan *Span, stop chan st
 
 	go func() {
 		defer wg.Done()
-		count := 0
 		for {
 			select {
 			case span := <-spans:
 				h.send(span)
-				count++
-				if h.maxcount > 0 && count >= h.maxcount {
-					close(stop)
-					h.log.Printf("stopping sender after maxcount\n")
-					return
-				}
 			case <-stop:
 				h.log.Printf("stopping sender after stop\n")
 				return

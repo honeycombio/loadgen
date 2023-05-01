@@ -31,7 +31,7 @@ type Options struct {
 	} `group:"Format Options"`
 	Quantity struct {
 		TPS        int           `long:"tps" description:"the number of traces to generate per second" default:"1"`
-		TraceCount int           `long:"tracecount" description:"the maximum number of traces to generate (0 means no limit)" default:"1"`
+		TraceCount int64         `long:"tracecount" description:"the maximum number of traces to generate (0 means no limit)" default:"1"`
 		MaxTime    time.Duration `long:"maxtime" description:"the maximum time to spend generating traces (0 means no limit)" default:"60s"`
 		Ramp       time.Duration `long:"ramp" description:"seconds to spend ramping up or down to the desired TPS" default:"1s"`
 	} `group:"Quantity Options"`
@@ -150,8 +150,23 @@ func main() {
 	dest := make(chan *Span, 1000)
 	sender.Run(wg, dest, stop)
 
+	// Start the trace counter to keep track of how many traces we've sent and
+	// stop the generator when we've reached the limit. We don't want to close
+	// counterChan until we're done with everything else because the generators
+	// block on it and we want that.
+	wg.Add(1)
+	counterChan := make(chan int64)
+	defer close(counterChan)
+	go func() {
+		if !TraceCounter(log, args.Quantity.TraceCount, counterChan, stop) {
+			// give the senders a chance to finish sending
+			time.Sleep(1 * time.Second)
+			close(stop)
+		}
+		wg.Done()
+	}()
+
 	// start the load generator to create spans and send them on the source chan
-	src := make(chan *Span, 1000)
 	var generator Generator
 	if args.Sender == "otel" {
 		generator = NewOTelTraceGenerator(log, args)
@@ -159,17 +174,7 @@ func main() {
 		generator = NewTraceGenerator(log, args)
 	}
 	wg.Add(1)
-	go generator.Generate(args, wg, src, stop)
-
-	// start the span counter to keep track of how many spans we've sent
-	// and stop the generator when we've reached the limit
-	wg.Add(1)
-	go func() {
-		if !TraceCounter(log, src, dest, int64(args.Quantity.TraceCount), stop) {
-			close(stop)
-		}
-		wg.Done()
-	}()
+	go generator.Generate(args, wg, dest, stop, counterChan)
 
 	// wait for things to finish
 	wg.Wait()

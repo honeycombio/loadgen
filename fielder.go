@@ -151,15 +151,21 @@ func NewFielder(name string, count int) *Fielder {
 	return &Fielder{fields}
 }
 
-func (f *Fielder) GetFields() map[string]any {
+func (f *Fielder) GetFields(count int64) map[string]any {
 	fields := make(map[string]any)
+	if count != 0 {
+		fields["count"] = count
+	}
 	for k, v := range f.fields {
 		fields[k] = v()
 	}
 	return fields
 }
 
-func (f *Fielder) AddFields(span trace.Span) {
+func (f *Fielder) AddFields(span trace.Span, count int64) {
+	if count != 0 {
+		span.SetAttributes(attribute.Int64("count", count))
+	}
 	for key, val := range f.fields {
 		switch v := val().(type) {
 		case int64:

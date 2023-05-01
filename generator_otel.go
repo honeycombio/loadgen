@@ -63,17 +63,17 @@ func (s *OTelTraceGenerator) generate_spans(ctx context.Context, depth int, span
 		durationRemaining -= durationThisSpan
 		time.Sleep(durationThisSpan / 2)
 		span := trace.SpanFromContext(ctx)
-		s.fielder.AddFields(span)
+		s.fielder.AddFields(span, 0)
 		s.generate_spans(ctx, depth-1, spancount-nspans, durationPerChild)
 		time.Sleep(durationThisSpan / 2)
 		span.End()
 	}
 }
 
-func (s *OTelTraceGenerator) generate_root(depth int, spancount int, timeRemaining time.Duration) {
+func (s *OTelTraceGenerator) generate_root(count int64, depth int, spancount int, timeRemaining time.Duration) {
 	ctx := context.Background()
 	ctx, root := s.tracer.Start(ctx, "root")
-	s.fielder.AddFields(root)
+	s.fielder.AddFields(root, count)
 	thisSpanDuration := time.Duration(rand.Intn(int(timeRemaining) / (spancount + 1)))
 	childDuration := (timeRemaining - thisSpanDuration)
 
@@ -86,7 +86,7 @@ func (s *OTelTraceGenerator) generate_root(depth int, spancount int, timeRemaini
 // generator is a single goroutine that generates traces and sends them to the spans channel.
 // It runs until the stop channel is closed.
 // The trace time is determined by the duration, and as soon as one trace is sent the next one is started.
-func (s *OTelTraceGenerator) generator(wg *sync.WaitGroup) {
+func (s *OTelTraceGenerator) generator(wg *sync.WaitGroup, counter chan int64) {
 	s.mut.Lock()
 	depth := s.depth
 	spanCount := s.spanCount
@@ -103,13 +103,18 @@ func (s *OTelTraceGenerator) generator(wg *sync.WaitGroup) {
 			ticker.Stop()
 			return
 		case <-ticker.C:
-			// generate a trace
-			s.generate_root(depth, spanCount, duration)
+			// generate a trace if we haven't been stopped by the counter
+			select {
+			case count := <-counter:
+				s.generate_root(count, depth, spanCount, duration)
+			default:
+				// do nothing, we're done, and the stop will be caught by the outer select
+			}
 		}
 	}
 }
 
-func (s *OTelTraceGenerator) Generate(opts Options, wg *sync.WaitGroup, spans chan *Span, stop chan struct{}) {
+func (s *OTelTraceGenerator) Generate(opts Options, wg *sync.WaitGroup, spans chan *Span, stop chan struct{}, counter chan int64) {
 	defer wg.Done()
 	ngenerators := float64(opts.Quantity.TPS) / s.TPS()
 	uSgeneratorInterval := float64(opts.Quantity.Ramp.Microseconds()) / ngenerators
@@ -144,7 +149,7 @@ func (s *OTelTraceGenerator) Generate(opts Options, wg *sync.WaitGroup, spans ch
 				} else {
 					// s.log.Printf("starting new generator\n")
 					wg.Add(1)
-					go s.generator(wg)
+					go s.generator(wg, counter)
 				}
 			case Running:
 				// do nothing

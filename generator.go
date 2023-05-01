@@ -12,7 +12,7 @@ import (
 // taking opts.Duration to do so. Its TPS method returns the number of traces
 // per second it is currently generating.
 type Generator interface {
-	Generate(opts Options, wg *sync.WaitGroup, spans chan *Span, stop chan struct{})
+	Generate(opts Options, wg *sync.WaitGroup, spans chan *Span, stop chan struct{}, counter chan int64)
 	TPS() float64
 }
 
@@ -81,7 +81,7 @@ func (s *TraceGenerator) generate_spans(spans chan *Span, tid, pid string, depth
 			ParentId:    pid,
 			SpanId:      randID(8),
 			StartTime:   time.Now(),
-			Fields:      s.fielder.GetFields(),
+			Fields:      s.fielder.GetFields(0),
 		}
 		s.generate_spans(spans, tid, span.SpanId, depth-1, spancount-nspans, durationPerChild)
 		time.Sleep(durationThisSpan / 2)
@@ -91,13 +91,13 @@ func (s *TraceGenerator) generate_spans(spans chan *Span, tid, pid string, depth
 	}
 }
 
-func (s *TraceGenerator) generate_root(spans chan *Span, depth int, spancount int, timeRemaining time.Duration) {
+func (s *TraceGenerator) generate_root(spans chan *Span, count int64, depth int, spancount int, timeRemaining time.Duration) {
 	root := &Span{
 		ServiceName: "test",
 		TraceId:     randID(16),
 		SpanId:      randID(8),
 		StartTime:   time.Now(),
-		Fields:      s.fielder.GetFields(),
+		Fields:      s.fielder.GetFields(count),
 	}
 	thisSpanDuration := time.Duration(rand.Intn(int(timeRemaining) / (spancount + 1)))
 	childDuration := (timeRemaining - thisSpanDuration)
@@ -113,7 +113,7 @@ func (s *TraceGenerator) generate_root(spans chan *Span, depth int, spancount in
 // generator is a single goroutine that generates traces and sends them to the spans channel.
 // It runs until the stop channel is closed.
 // The trace time is determined by the duration, and as soon as one trace is sent the next one is started.
-func (s *TraceGenerator) generator(wg *sync.WaitGroup, spans chan *Span) {
+func (s *TraceGenerator) generator(wg *sync.WaitGroup, spans chan *Span, counter chan int64) {
 	s.mut.Lock()
 	depth := s.depth
 	spanCount := s.spanCount
@@ -130,8 +130,13 @@ func (s *TraceGenerator) generator(wg *sync.WaitGroup, spans chan *Span) {
 			ticker.Stop()
 			return
 		case <-ticker.C:
-			// generate a trace
-			s.generate_root(spans, depth, spanCount, duration)
+			// generate a trace if we haven't been stopped by the counter
+			select {
+			case count := <-counter:
+				s.generate_root(spans, count, depth, spanCount, duration)
+			default:
+				// do nothing, we're done, and the stop will be caught by the outer select
+			}
 		}
 	}
 }
@@ -144,7 +149,7 @@ const (
 	Stopping
 )
 
-func (s *TraceGenerator) Generate(opts Options, wg *sync.WaitGroup, spans chan *Span, stop chan struct{}) {
+func (s *TraceGenerator) Generate(opts Options, wg *sync.WaitGroup, spans chan *Span, stop chan struct{}, counter chan int64) {
 	defer wg.Done()
 	ngenerators := float64(opts.Quantity.TPS) / s.TPS()
 	uSgeneratorInterval := float64(opts.Quantity.Ramp.Microseconds()) / ngenerators
@@ -179,7 +184,7 @@ func (s *TraceGenerator) Generate(opts Options, wg *sync.WaitGroup, spans chan *
 				} else {
 					// s.log.Printf("starting new generator\n")
 					wg.Add(1)
-					go s.generator(wg, spans)
+					go s.generator(wg, spans, counter)
 				}
 			case Running:
 				// do nothing
