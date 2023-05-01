@@ -37,6 +37,7 @@ type Options struct {
 	} `group:"Quantity Options"`
 	Sender  string `long:"sender" description:"type of sender" choice:"honeycomb" choice:"otel" choice:"print" choice:"dummy" default:"honeycomb"`
 	Verbose []bool `short:"v" long:"verbose" description:"level of verbosity - can use more than once (default silent)"`
+	apihost *url.URL
 }
 
 // parses the host information and returns a cleaned-up version to make
@@ -103,26 +104,18 @@ func main() {
 	}
 
 	log := NewLogger(args.Verbose)
-	u := parseHost(log, args.Telemetry.Host, args.Telemetry.Insecure)
+	args.apihost = parseHost(log, args.Telemetry.Host, args.Telemetry.Insecure)
 
-	log.Info("host: %s, dataset: %s, apikey: ...%4.4s\n", u.String(), args.Telemetry.Dataset, args.Telemetry.APIKey)
+	log.Info("host: %s, dataset: %s, apikey: ...%4.4s\n", args.apihost.String(), args.Telemetry.Dataset, args.Telemetry.APIKey)
 
-	var traceSender TraceSender
 	var sender Sender
 	switch args.Sender {
 	case "dummy":
-		sender = NewDummySender(log)
-		traceSender = NewTraceSenderDummy(args)
+		sender = NewSenderDummy(log, args)
 	case "print":
-		sender = NewPrintSender(log)
-		traceSender = NewTraceSenderPrint(log, args)
+		sender = NewSenderPrint(log, args)
 	case "honeycomb":
-		var err error
-		sender, err = NewHoneycombSender(log, args, u.String())
-		if err != nil {
-			log.Fatal("error configuring honeycomb sender: %s\n", err)
-		}
-		traceSender = NewTraceSenderHoneycomb(args)
+		sender = NewSenderHoneycomb(args)
 	case "otel":
 		// ctx := context.Background()
 
@@ -130,9 +123,9 @@ func main() {
 		// 	"x-honeycomb-team":    args.APIKey,
 		// 	"x-honeycomb-dataset": args.Dataset,
 		// }
-		host, insecure := formatURLForGRPC(u)
-		sender = NewOTelHoneySender(log, args.Telemetry.Dataset, args.Telemetry.APIKey, host, insecure)
-		traceSender = NewTraceSenderDummy(args)
+		// host, insecure := formatURLForGRPC(u)
+		// sender = NewOTelHoneySender(log, args.Telemetry.Dataset, args.Telemetry.APIKey, host, insecure)
+		sender = NewSenderDummy(log, args)
 	}
 
 	// create a stop channel so we can shut down gracefully
@@ -152,8 +145,7 @@ func main() {
 	}()
 
 	// start the sender to receive spans and forward them appropriately
-	dest := make(chan *Span, 1000)
-	sender.Run(wg, dest, stop)
+	// sender.Run(wg, dest, stop)
 
 	// Start the trace counter to keep track of how many traces we've sent and
 	// stop the generator when we've reached the limit. We don't want to close
@@ -172,15 +164,16 @@ func main() {
 	}()
 
 	// start the load generator to create spans and send them on the source chan
-	var generator Generator = NewGenericTraceGenerator(traceSender, log, args)
+	var generator Generator = NewGenericTraceGenerator(sender, log, args)
 	// if args.Sender == "otel" {
 	// 	generator = NewOTelTraceGenerator(log, args)
 	// } else {
 	// 	generator = NewBeelineTraceGenerator(log, args)
 	// }
 	wg.Add(1)
-	go generator.Generate(args, wg, dest, stop, counterChan)
+	go generator.Generate(args, wg, stop, counterChan)
 
 	// wait for things to finish
 	wg.Wait()
+	sender.Close()
 }

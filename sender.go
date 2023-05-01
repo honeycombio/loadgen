@@ -25,7 +25,7 @@ func (s *Span) IsRootSpan() bool {
 	return s.ParentId == ""
 }
 
-type Sender interface {
+type ObsoleteSender interface {
 	Run(wg *sync.WaitGroup, spans chan *Span, stop chan struct{})
 }
 
@@ -33,42 +33,10 @@ type Sendable interface {
 	Send()
 }
 
-type TraceSender interface {
+type Sender interface {
 	CreateTrace(ctx context.Context, name string, fielder *Fielder, count int64) (context.Context, Sendable)
 	CreateSpan(ctx context.Context, name string, fielder *Fielder) (context.Context, Sendable)
-}
-
-type TraceSenderHoneycomb struct{}
-
-func NewTraceSenderHoneycomb(opts Options) *TraceSenderHoneycomb {
-	beeline.Init(beeline.Config{
-		WriteKey:    opts.Telemetry.APIKey,
-		APIHost:     opts.Telemetry.Host,
-		ServiceName: "loadtest",
-		// Dataset:     opts.Telemetry.Dataset,
-		// STDOUT: true,
-	})
-	return &TraceSenderHoneycomb{}
-}
-
-func (t *TraceSenderHoneycomb) Close() {
-	beeline.Close()
-}
-
-func (t *TraceSenderHoneycomb) CreateTrace(ctx context.Context, name string, fielder *Fielder, count int64) (context.Context, Sendable) {
-	ctx, root := beeline.StartSpan(ctx, "root")
-	for k, v := range fielder.GetFields(count) {
-		root.AddField(k, v)
-	}
-	return ctx, root
-}
-
-func (t *TraceSenderHoneycomb) CreateSpan(ctx context.Context, name string, fielder *Fielder) (context.Context, Sendable) {
-	ctx, span := beeline.StartSpan(ctx, name)
-	for k, v := range fielder.GetFields(0) {
-		span.AddField(k, v)
-	}
-	return ctx, span
+	Close()
 }
 
 type OTelSendable struct {
@@ -79,21 +47,21 @@ func (s OTelSendable) Send() {
 	(trace.Span)(s).End()
 }
 
-type TraceSenderOTel struct {
+type SenderOTel struct {
 	tracer trace.Tracer
 }
 
-func NewTraceSenderOTel(opts Options) *TraceSenderOTel {
-	return &TraceSenderOTel{
+func NewSenderOTel(opts Options) *SenderOTel {
+	return &SenderOTel{
 		tracer: otel.Tracer("test"),
 	}
 }
 
-func (t *TraceSenderOTel) Close() {
+func (t *SenderOTel) Close() {
 	beeline.Close()
 }
 
-func (t *TraceSenderOTel) CreateTrace(ctx context.Context, name string, fielder *Fielder, count int64) (context.Context, Sendable) {
+func (t *SenderOTel) CreateTrace(ctx context.Context, name string, fielder *Fielder, count int64) (context.Context, Sendable) {
 	ctx, root := t.tracer.Start(ctx, "root")
 	fielder.AddFields(root, count)
 	var ots OTelSendable
@@ -101,60 +69,10 @@ func (t *TraceSenderOTel) CreateTrace(ctx context.Context, name string, fielder 
 	return ctx, ots
 }
 
-func (t *TraceSenderOTel) CreateSpan(ctx context.Context, name string, fielder *Fielder) (context.Context, Sendable) {
+func (t *SenderOTel) CreateSpan(ctx context.Context, name string, fielder *Fielder) (context.Context, Sendable) {
 	span := trace.SpanFromContext(ctx)
 	fielder.AddFields(span, 0)
 	var ots OTelSendable
 	ots.Span = span
 	return ctx, ots
-}
-
-type DummySendable struct{}
-
-func (s DummySendable) Send() {
-}
-
-type TraceSenderDummy struct{}
-
-func NewTraceSenderDummy(opts Options) TraceSender {
-	return &TraceSenderDummy{}
-}
-
-func (t *TraceSenderDummy) Close() {
-}
-
-func (t *TraceSenderDummy) CreateTrace(ctx context.Context, name string, fielder *Fielder, count int64) (context.Context, Sendable) {
-	return ctx, DummySendable{}
-}
-
-func (t *TraceSenderDummy) CreateSpan(ctx context.Context, name string, fielder *Fielder) (context.Context, Sendable) {
-	return ctx, DummySendable{}
-}
-
-type TraceSenderPrint struct {
-	spancount int
-	rootspans int
-	log       Logger
-}
-
-func NewTraceSenderPrint(log Logger, opts Options) TraceSender {
-	return &TraceSenderPrint{
-		log: log,
-	}
-}
-
-func (t *TraceSenderPrint) Close() {
-	t.log.Info("tracesender sent %d spans with %d root spans %p\n", t.spancount, t.rootspans, t)
-}
-
-func (t *TraceSenderPrint) CreateTrace(ctx context.Context, name string, fielder *Fielder, count int64) (context.Context, Sendable) {
-	t.log.Debug("CreateTrace: %s %p\n", name, t)
-	t.rootspans++
-	t.spancount++
-	return ctx, DummySendable{}
-}
-
-func (t *TraceSenderPrint) CreateSpan(ctx context.Context, name string, fielder *Fielder) (context.Context, Sendable) {
-	t.spancount++
-	return ctx, DummySendable{}
 }

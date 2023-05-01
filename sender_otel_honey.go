@@ -10,7 +10,7 @@ type OTelHoneySender struct {
 }
 
 // make sure it implements Sender
-var _ Sender = (*OTelHoneySender)(nil)
+var _ ObsoleteSender = (*OTelHoneySender)(nil)
 
 func NewOTelHoneySender(log Logger, dataset, apiKey, apiHost string, insecure bool) *OTelHoneySender {
 	return &OTelHoneySender{

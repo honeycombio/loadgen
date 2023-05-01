@@ -15,13 +15,13 @@ type GenericTraceGenerator struct {
 	chans     []chan struct{}
 	mut       sync.RWMutex
 	log       Logger
-	tracer    TraceSender
+	tracer    Sender
 }
 
 // make sure it implements Generator
 var _ Generator = (*GenericTraceGenerator)(nil)
 
-func NewGenericTraceGenerator(tsender TraceSender, log Logger, opts Options) *GenericTraceGenerator {
+func NewGenericTraceGenerator(tsender Sender, log Logger, opts Options) *GenericTraceGenerator {
 	chans := make([]chan struct{}, 0)
 	return &GenericTraceGenerator{
 		depth:     opts.Format.Depth,
@@ -109,7 +109,7 @@ func (s *GenericTraceGenerator) generator(wg *sync.WaitGroup, counter chan int64
 	}
 }
 
-func (s *GenericTraceGenerator) Generate(opts Options, wg *sync.WaitGroup, spans chan *Span, stop chan struct{}, counter chan int64) {
+func (s *GenericTraceGenerator) Generate(opts Options, wg *sync.WaitGroup, stop chan struct{}, counter chan int64) {
 	defer wg.Done()
 	ngenerators := float64(opts.Quantity.TPS) / s.TPS()
 	uSgeneratorInterval := float64(opts.Quantity.Ramp.Microseconds()) / ngenerators
