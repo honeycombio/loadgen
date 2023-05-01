@@ -107,10 +107,12 @@ func main() {
 
 	log.Printf("host: %s, dataset: %s, apikey: %s\n\n", u.String(), args.Telemetry.Dataset, args.Telemetry.APIKey)
 
+	var traceSender TraceSender
 	var sender Sender
 	switch args.Sender {
 	case "dummy":
 		sender = NewDummySender(log)
+		traceSender = NewTraceSenderDummy(args)
 	case "print":
 		sender = NewPrintSender(log)
 	case "honeycomb":
@@ -119,6 +121,7 @@ func main() {
 		if err != nil {
 			log.Fatal("error configuring honeycomb sender: %s\n", err)
 		}
+		traceSender = NewTraceSenderHoneycomb(args)
 	case "otel":
 		// ctx := context.Background()
 
@@ -128,6 +131,7 @@ func main() {
 		// }
 		host, insecure := formatURLForGRPC(u)
 		sender = NewOTelHoneySender(log, args.Telemetry.Dataset, args.Telemetry.APIKey, host, insecure)
+		traceSender = NewTraceSenderDummy(args)
 	}
 
 	// create a stop channel so we can shut down gracefully
@@ -167,12 +171,12 @@ func main() {
 	}()
 
 	// start the load generator to create spans and send them on the source chan
-	var generator Generator
-	if args.Sender == "otel" {
-		generator = NewOTelTraceGenerator(log, args)
-	} else {
-		generator = NewTraceGenerator(log, args)
-	}
+	var generator Generator = NewGenericTraceGenerator(traceSender, log, args)
+	// if args.Sender == "otel" {
+	// 	generator = NewOTelTraceGenerator(log, args)
+	// } else {
+	// 	generator = NewBeelineTraceGenerator(log, args)
+	// }
 	wg.Add(1)
 	go generator.Generate(args, wg, dest, stop, counterChan)
 
