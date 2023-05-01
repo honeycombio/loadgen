@@ -8,7 +8,7 @@ func TraceCounter(log Logger, maxcount int64, output chan int64, stop chan struc
 	var count int64
 
 	defer func() {
-		log.Info("trace counter exiting after %d traces\n", count)
+		log.Warn("trace counter exiting after %d traces\n", count)
 	}()
 
 	for {

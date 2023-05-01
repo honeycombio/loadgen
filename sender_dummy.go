@@ -24,7 +24,7 @@ func (h *DummySender) Run(wg *sync.WaitGroup, spans chan *Span, stop chan struct
 			case span := <-spans:
 				h.send(span)
 			case <-stop:
-				h.log.Info("dummysender sent %d spans with %d root spans\n", h.spancount, h.rootspans)
+				h.log.Warn("dummysender sent %d spans with %d root spans\n", h.spancount, h.rootspans)
 				return
 			}
 		}
@@ -57,7 +57,7 @@ func NewSenderDummy(log Logger, opts Options) Sender {
 }
 
 func (t *SenderDummy) Close() {
-	t.log.Info("sender sent %d traces with %d spans\n", t.tracecount, t.spancount)
+	t.log.Warn("sender sent %d traces with %d spans\n", t.tracecount, t.spancount)
 }
 
 func (t *SenderDummy) CreateTrace(ctx context.Context, name string, fielder *Fielder, count int64) (context.Context, Sendable) {

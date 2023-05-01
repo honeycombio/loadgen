@@ -51,7 +51,7 @@ func NewSenderPrint(log Logger, opts Options) Sender {
 }
 
 func (t *SenderPrint) Close() {
-	t.log.Info("sender sent %d traces with %d spans\n", t.tracecount, t.spancount)
+	t.log.Warn("sender sent %d traces with %d spans\n", t.tracecount, t.spancount)
 }
 
 type PrintKey string

@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"net/url"
 	"os"
 	"os/signal"
@@ -35,9 +34,24 @@ type Options struct {
 		MaxTime    time.Duration `long:"maxtime" description:"the maximum time to spend generating traces (0 means no limit)" default:"60s"`
 		Ramp       time.Duration `long:"ramp" description:"seconds to spend ramping up or down to the desired TPS" default:"1s"`
 	} `group:"Quantity Options"`
-	Sender  string `long:"sender" description:"type of sender" choice:"honeycomb" choice:"otel" choice:"print" choice:"dummy" default:"honeycomb"`
-	Verbose []bool `short:"v" long:"verbose" description:"level of verbosity - can use more than once (default silent)"`
-	apihost *url.URL
+	Sender   string `long:"sender" description:"type of sender" choice:"honeycomb" choice:"otel" choice:"print" choice:"dummy" default:"honeycomb"`
+	LogLevel string `long:"loglevel" description:"level of logging" choice:"debug" choice:"info" choice:"warn" choice:"error" default:"error"`
+	apihost  *url.URL
+}
+
+func (o *Options) DebugLevel() int {
+	switch o.LogLevel {
+	case "debug":
+		return 3
+	case "info":
+		return 2
+	case "warn":
+		return 1
+	case "error":
+		return 0
+	default:
+		return 0
+	}
 }
 
 // parses the host information and returns a cleaned-up version to make
@@ -70,11 +84,6 @@ func parseHost(log Logger, host string, insecure bool) *url.URL {
 	return u
 }
 
-func formatURLForGRPC(u *url.URL) (string, bool) {
-	// it's insecure if it's not https
-	return fmt.Sprintf("%s:%s", u.Hostname(), u.Port()), u.Scheme != "https"
-}
-
 func main() {
 	var args Options
 
@@ -103,10 +112,10 @@ func main() {
 		}
 	}
 
-	log := NewLogger(args.Verbose)
+	log := NewLogger(args.DebugLevel())
 	args.apihost = parseHost(log, args.Telemetry.Host, args.Telemetry.Insecure)
 
-	log.Info("host: %s, dataset: %s, apikey: ...%4.4s\n", args.apihost.String(), args.Telemetry.Dataset, args.Telemetry.APIKey)
+	log.Warn("host: %s, dataset: %s, apikey: ...%4.4s\n", args.apihost.String(), args.Telemetry.Dataset, args.Telemetry.APIKey)
 
 	var sender Sender
 	switch args.Sender {
@@ -125,7 +134,7 @@ func main() {
 		// }
 		// host, insecure := formatURLForGRPC(u)
 		// sender = NewOTelHoneySender(log, args.Telemetry.Dataset, args.Telemetry.APIKey, host, insecure)
-		sender = NewSenderDummy(log, args)
+		sender = NewSenderOTel(log, args)
 	}
 
 	// create a stop channel so we can shut down gracefully
@@ -139,7 +148,7 @@ func main() {
 	// wg.Add(1)
 	go func() {
 		<-sigch
-		log.Info("\nshutting down\n")
+		log.Warn("\nshutting down\n")
 		close(stop)
 		// wg.Done()
 	}()

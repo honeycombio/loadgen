@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"math/rand"
 	"runtime"
 
@@ -170,6 +171,8 @@ func (f *Fielder) AddFields(span trace.Span, count int64) {
 		switch v := val().(type) {
 		case int64:
 			span.SetAttributes(attribute.Int64(key, v))
+		case uint64:
+			span.SetAttributes(attribute.Int64(key, int64(v)))
 		case float64:
 			span.SetAttributes(attribute.Float64(key, v))
 		case string:
@@ -177,7 +180,7 @@ func (f *Fielder) AddFields(span trace.Span, count int64) {
 		case bool:
 			span.SetAttributes(attribute.Bool(key, v))
 		default:
-			panic("unknown type -- implementation error in fielder.go")
+			panic(fmt.Sprintf("unknown type %T for %s -- implementation error in fielder.go", v, key))
 		}
 	}
 }
