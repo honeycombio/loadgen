@@ -150,9 +150,9 @@ type Fielder struct {
 // combining an adjective and a noun and are consistent for a given fielder.
 // The field values are randomly generated.
 // Fielder also includes two special fields: goroutine_id and process_id.
-func NewFielder(name string, nfields, nservices int) *Fielder {
+func NewFielder(seed string, nfields, nservices int) *Fielder {
 	fields := make(map[string]func() any)
-	rng := NewRng(name)
+	rng := NewRng(seed)
 	gens := rng.getValueGenerators()
 	for i := 0; i < nfields; i++ {
 		fieldname := rng.Choice(adjectives) + "-" + rng.Choice(nouns)

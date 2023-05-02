@@ -23,6 +23,9 @@ Install:
 Get Usage information:
 `loadgen -h`
 
+Generate a single trace, 3 spans deep, and print it to the console:
+`
+
 Send 3 traces to Honeycomb's production service, assuming you have an API key in the environment as HONEYCOMB_API_KEY:
 `loadgen --dataset=loadtest --tracecount=3`
 
@@ -61,15 +64,17 @@ loadgen generates telemetry trace loads for performance testing. It can send
 traces to honeycomb or to a local agent, and it can generate OTLP or
 Honeycomb-formatted traces. It's highly configurable:
 
-- depth is the average depth (nesting level) of a trace.
-- spancount is the average number of spans in a trace.
-If spancount is less than depth, the trace will be truncated at spancount.
+- depth is the depth (nesting level) of a trace.
+- spancount is the number of spans in a trace.
+- spanwidth is the number of extra fields in a span beyond the standard ones
+
+If spancount is less than depth, the trace will be truncated at the depth of spancount.
 If spancount is greater than depth, some of the spans will have siblings.
 
-- spanwidth is the average number of fields in a span; this will vary by
-service but will be the same for all calls to a given service, and the names
-and types of all fields for an service will be consistent even across runs of
-loadgen (randomness is seeded by service name).
+The names and types of all extra (random) fields will be consistent for a given
+dataset, even across runs of loadgen so that datasets have longterm consistency.
+Randomness is normally seeded by dataset name but if needed the seed can be set
+to ensure consistency across multiple datasets.
 
 Fields in a span will be randomly selected between the following types:
 #   - int (rectangular min/max)

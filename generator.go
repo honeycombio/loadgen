@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"math/rand"
 	"sync"
 	"time"
@@ -44,7 +45,7 @@ func NewTraceGenerator(tsender Sender, log Logger, opts Options) *TraceGenerator
 		depth:     opts.Format.Depth,
 		spanCount: opts.Format.SpanCount,
 		duration:  opts.Format.Duration,
-		fielder:   NewFielder(opts.Telemetry.Dataset, opts.Format.SpanWidth, opts.Format.Depth),
+		fielder:   NewFielder(opts.Seed, opts.Format.SpanWidth, opts.Format.Depth),
 		chans:     chans,
 		log:       log,
 		tracer:    tsender,
@@ -58,16 +59,34 @@ func NewTraceGenerator(tsender Sender, log Logger, opts Options) *TraceGenerator
 // If spancount is less than depth, the trace will be truncated at spancount.
 // If spancount is greater than depth, some of the children will have siblings.
 func (s *TraceGenerator) generate_spans(ctx context.Context, depth int, spancount int, timeRemaining time.Duration) {
-	if depth == 0 {
+	if depth == 0 || spancount == 0 {
 		return
 	}
-	// this is the number of spans at this level
+	// nspans is the number of spans at this level
 	nspans := 1
 	if spancount > depth {
 		// there is some chance that this level will have multiple spans based on the difference
 		// between spancount and depth. (but we'll override this if it's a root span)
-		nspans = 1 + rand.Intn(spancount-depth-1)
+		// nspans is always between 1 and spancount
+		nspans = 1 + rand.Intn(spancount-depth)
 	}
+
+	spancounts := make([]int, 0)
+	if nspans == 1 {
+		// if there's only one span, give it all the counts
+		spancounts = append(spancounts, spancount)
+	} else {
+		// split the counts among the spans at this level
+		// we take a random portion of the counts for each span, then put the leftovers in a random span
+		count := spancount
+		spansPerPeer := spancount / nspans // always at least 1
+		for i := 0; i < nspans; i++ {
+			spancounts = append(spancounts, rand.Intn(spansPerPeer)+1)
+			count -= spancounts[i]
+		}
+		spancounts[rand.Intn(nspans)] += count
+	}
+	fmt.Printf("depth: %d spancount: %d nspans: %d spancounts: %v\n", depth, spancount, nspans, spancounts)
 
 	durationRemaining := time.Duration(rand.Intn(int(timeRemaining) / (spancount + 1)))
 	durationPerChild := (timeRemaining - durationRemaining) / time.Duration(nspans)
@@ -77,7 +96,7 @@ func (s *TraceGenerator) generate_spans(ctx context.Context, depth int, spancoun
 		durationRemaining -= durationThisSpan
 		time.Sleep(durationThisSpan / 2)
 		_, span := s.tracer.CreateSpan(ctx, s.fielder.GetServiceName(depth), s.fielder)
-		s.generate_spans(ctx, depth-1, spancount-nspans, durationPerChild)
+		s.generate_spans(ctx, depth-1, spancounts[i]-1, durationPerChild)
 		time.Sleep(durationThisSpan / 2)
 		span.Send()
 	}

@@ -19,7 +19,7 @@ type Options struct {
 	Telemetry struct {
 		Host     string `long:"host" description:"the url of the host to receive the telemetry (or honeycomb, dogfood, local)" default:"honeycomb"`
 		Insecure bool   `long:"insecure" description:"use this for insecure http (not https) connections"`
-		Dataset  string `long:"dataset" description:"sends all traces to the given dataset" env:"HONEYCOMB_DATASET"`
+		Dataset  string `long:"dataset" description:"sends all traces to the given dataset" env:"HONEYCOMB_DATASET" default:"loadgen"`
 		APIKey   string `long:"apikey" description:"the honeycomb API key" env:"HONEYCOMB_API_KEY"`
 	} `group:"Telemetry Options"`
 	Format struct {
@@ -39,6 +39,7 @@ type Options struct {
 		Protocol string `long:"protocol" description:"for otel only, protocol to use" choice:"grpc" choice:"protobuf" choice:"json" default:"grpc"`
 	} `group:"Output Options"`
 	LogLevel string `long:"loglevel" description:"level of logging" choice:"debug" choice:"info" choice:"warn" choice:"error" default:"warn"`
+	Seed     string `long:"seed" description:"string seed for random number generator (defaults to dataset name)"`
 	apihost  *url.URL
 }
 
