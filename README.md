@@ -86,12 +86,13 @@ In addition, every span will always have the following fields:
 
 ## Key adjustable values:
 
-- `Duration` is the average duration of a trace's root span in milliseconds; individual
-spans will be randomly assigned durations that will fit within the root span's duration.
+- `Duration` is the average duration of a trace's root span; individual spans will be randomly assigned durations that will fit within the root span's duration.
 - `MaxTime` is the total amount of time to spend generating traces (0 means no limit).
 - `TracesPerSecond` is the number of root spans to generate per second.
 - `TraceCount` is the maximum number of traces to generate; as soon as TraceCount is reached, the process stops (0 means no limit).
 - `Ramp` is the number of seconds to spend ramping up and down to the desired TPS.
+
+All durations are expressed as sequence of decimal numbers, each with optional fraction and a required unit suffix, such as "300ms", "1.5h" or "2h45m". Valid time units are "ns", "us" (or "µs"), "ms", "s", "m", "h".
 
 Functionally, the system works by spinning up a number of goroutines, each of which generates a stream of spans. The number of goroutines needed will equal `tracesPerSecond * Duration`.
 
