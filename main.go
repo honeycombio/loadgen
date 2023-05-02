@@ -173,12 +173,7 @@ func main() {
 	}()
 
 	// start the load generator to create spans and send them on the source chan
-	var generator Generator = NewGenericTraceGenerator(sender, log, args)
-	// if args.Sender == "otel" {
-	// 	generator = NewOTelTraceGenerator(log, args)
-	// } else {
-	// 	generator = NewBeelineTraceGenerator(log, args)
-	// }
+	var generator Generator = NewTraceGenerator(sender, log, args)
 	wg.Add(1)
 	go generator.Generate(args, wg, stop, counterChan)
 

@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"fmt"
+	"math/rand"
 	"time"
 )
 
@@ -10,6 +12,15 @@ var _ Sender = (*SenderPrint)(nil)
 
 func ft(ts time.Time) string {
 	return ts.Format("15:04:05.000")
+}
+
+// randID creates a random byte array of length l and returns it as a hex string.
+func randID(l int) string {
+	id := make([]byte, l)
+	for i := 0; i < l; i++ {
+		id[i] = byte(rand.Intn(256))
+	}
+	return fmt.Sprintf("%x", id)
 }
 
 type traceInfo struct {
