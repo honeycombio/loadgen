@@ -6,11 +6,11 @@
 
 `loadgen` generates telemetry loads for performance testing, load testing, and
 functionality testing. It allows you to specify the number of spans in a trace,
-the depth (nesting level) of traces, the number of different service names, as
-well as the number of fields in spans. It supports setting the number of traces
-per second it generates, and can generate a specific quanity of traces, or run
-for a specific amount of time, or both. It can also control the speed at which
-it ramps up and down to the target rate.
+the depth (nesting level) of traces, the duration of traces, as well as the
+number of fields in spans. It supports setting the number of traces per second
+it generates, and can generate a specific quanity of traces, or run for a
+specific amount of time, or both. It can also control the speed at which it
+ramps up and down to the target rate.
 
 It can generate traces in Honeycomb's proprietary protocol as well as all the
 OTel-standard protocols, and it can send them to Honeycomb or any OTel agent.
