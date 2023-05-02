@@ -77,23 +77,23 @@ Randomness is normally seeded by dataset name but if needed the seed can be set
 to ensure consistency across multiple datasets.
 
 Fields in a span will be randomly selected between the following types:
-#   - int (rectangular min/max)
-#   - int (gaussian mean/stddev)
-#   - float (rectangular min/max)
-#   - float (gaussian mean/stddev)
-#   - string (from list)
-#   - string (random min/max length)
-#   - bool
+ - int (rectangular min/max)
+ - int (gaussian mean/stddev)
+ - float (rectangular min/max)
+ - float (gaussian mean/stddev)
+ - string (from list)
+ - string (random min/max length)
+ - bool
 In addition, every span will always have the following fields:
-#   - service name
-#   - trace id
-#   - span id
-#   - parent span id
-#   - duration_ms
-#   - start_time
-#   - end_time
-#   - process_id (the process id of the loadgen process)
-#   - goroutine_id (the ID of the goroutine producing that particular trace)
+ - service name
+ - trace id
+ - span id
+ - parent span id
+ - duration_ms
+ - start_time
+ - end_time
+ - process_id (the process id of the loadgen process)
+ - goroutine_id (the ID of the goroutine producing that particular trace)
 
 - Duration is the average duration of a trace's root span in milliseconds; individual
 spans will be randomly assigned durations that will fit within the root span's duration.
@@ -110,5 +110,3 @@ increasing or decreasing the number of goroutines.
 
 To mix different kinds of traces, or send traces to multiple datasets, use
 multiple loadgen processes.
-
-## help
