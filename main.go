@@ -18,14 +18,13 @@ type Options struct {
 	Telemetry struct {
 		Host     string `long:"host" description:"the url of the host to receive the telemetry (or honeycomb, dogfood, localhost)" default:"honeycomb"`
 		Insecure bool   `long:"insecure" description:"use this for insecure http (not https) connections"`
-		Dataset  string `long:"dataset" description:"if set, sends all traces to the given dataset; otherwise, sends them to the dataset named for the service" env:"HONEYCOMB_DATASET"`
+		Dataset  string `long:"dataset" description:"sends all traces to the given dataset" env:"HONEYCOMB_DATASET"`
 		APIKey   string `long:"apikey" description:"the honeycomb API key" env:"HONEYCOMB_API_KEY"`
 	} `group:"Telemetry Options"`
 	Format struct {
-		NServices int           `long:"nservices" description:"the number of services to simulate" default:"1"`
 		Depth     int           `long:"depth" description:"the average depth of a trace" default:"3"`
 		SpanCount int           `long:"spancount" description:"the average number of spans in a trace" default:"3"`
-		SpanWidth int           `long:"spanwidth" description:"the average number of random fields in a span beyond the standard ones" default:"10"`
+		SpanWidth int           `long:"spanwidth" description:"the average number of random fields in a span beyond the standard ones" default:"5"`
 		Duration  time.Duration `long:"duration" description:"the duration of a trace" default:"1s"`
 	} `group:"Format Options"`
 	Quantity struct {
@@ -144,13 +143,17 @@ func main() {
 
 	// catch ctrl-c and close the stop channel
 	sigch := make(chan os.Signal, 1)
-	signal.Notify(sigch, os.Interrupt)
-	// wg.Add(1)
+	signal.Notify(sigch, os.Interrupt, os.Kill)
+	// we don't want a wait group for this one, or we'll never exit
 	go func() {
-		<-sigch
-		log.Warn("\nshutting down\n")
-		close(stop)
-		// wg.Done()
+		select {
+		case <-sigch:
+			log.Warn("\nshutting down from operating system signal\n")
+			close(stop)
+			return
+		case <-stop:
+			return
+		}
 	}()
 
 	// start the sender to receive spans and forward them appropriately

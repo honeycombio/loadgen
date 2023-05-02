@@ -1,13 +1,8 @@
 package main
 
-// loadgen generates telemetry loads for performance testing. It can generate
-// traces (and eventually metrics and logs) It can send them to honeycomb or to
-// a local agent, and it can generate OTLP or Honeycomb-formatted traces. It's
-// highly configurable:
-//
-// - nservices is the number of communicating services to simulate; they will be
-// divided into a triangular tree of services where each service will only call its siblings and the next rank.
-// Services are named for spices.
+// loadgen generates telemetry trace loads for performance testing. It can send
+// traces to honeycomb or to a local agent, and it can generate OTLP or
+// Honeycomb-formatted traces. It's highly configurable:
 //
 // - depth is the average depth (nesting level) of a trace.
 // - spancount is the average number of spans in a trace.
@@ -16,7 +11,9 @@ package main
 //
 // - spanwidth is the average number of fields in a span; this will vary by
 // service but will be the same for all calls to a given service, and the names
-// and types of all fields for an service will be consistent even across runs of loadgen (randomness is seeded by service name).
+// and types of all fields for an service will be consistent even across runs of
+// loadgen (randomness is seeded by service name).
+//
 // Fields in a span will be randomly selected between the following types:
 // #   - int (rectangular min/max)
 // #   - int (gaussian mean/stddev)
@@ -37,7 +34,7 @@ package main
 // #   - end_time
 // #   - process_id (the process id of the loadgen process)
 //
-// - avgDuration is the average duration of a trace's root span in milliseconds; individual
+// - Duration is the average duration of a trace's root span in milliseconds; individual
 // spans will be randomly assigned durations that will fit within the root span's duration.
 //
 // - maxTime is the total amount of time to spend generating traces (0 means no limit)
@@ -49,4 +46,4 @@ package main
 // generates a stream of spans. The number of goroutines needed will equal tracesPerSecond * avgDuration.
 // Rampup and rampdown are handled only by increasing or decreasing the number of goroutines.
 
-// If a mix of different kinds of traces is desired, multiple loadgen processes can be run.
+// To mix different kinds of traces, or send traces to multiple datasets, use multiple loadgen processes.

@@ -39,6 +39,7 @@ func (t *traceInfo) span(parent string) *traceInfo {
 
 type PrintSendable struct {
 	TInfo     *traceInfo
+	Name      string
 	StartTime time.Time
 	Fields    map[string]interface{}
 	log       Logger
@@ -46,7 +47,7 @@ type PrintSendable struct {
 
 func (s *PrintSendable) Send() {
 	endTime := time.Now()
-	s.log.Printf("T:%6.6s S:%4.4s P%4.4s start:%v end:%v %v\n", s.TInfo.TraceId, s.TInfo.SpanId, s.TInfo.ParentId, ft(s.StartTime), ft(endTime), s.Fields)
+	s.log.Printf("%s - T:%6.6s S:%4.4s P%4.4s start:%v end:%v %v\n", s.Name, s.TInfo.TraceId, s.TInfo.SpanId, s.TInfo.ParentId, ft(s.StartTime), ft(endTime), s.Fields)
 }
 
 type SenderPrint struct {
@@ -77,6 +78,7 @@ func (t *SenderPrint) CreateTrace(ctx context.Context, name string, fielder *Fie
 	}
 	ctx = context.WithValue(ctx, PrintKey("trace"), tinfo)
 	return ctx, &PrintSendable{
+		Name:   name,
 		TInfo:  tinfo,
 		Fields: fielder.GetFields(count),
 		log:    t.log,
@@ -88,6 +90,7 @@ func (t *SenderPrint) CreateSpan(ctx context.Context, name string, fielder *Fiel
 	tinfo := ctx.Value(PrintKey("trace")).(*traceInfo)
 	ctx = context.WithValue(ctx, PrintKey("trace"), tinfo.span(tinfo.SpanId))
 	return ctx, &PrintSendable{
+		Name:      name,
 		TInfo:     tinfo.span(tinfo.SpanId),
 		StartTime: time.Now(),
 		Fields:    fielder.GetFields(0),

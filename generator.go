@@ -44,7 +44,7 @@ func NewTraceGenerator(tsender Sender, log Logger, opts Options) *TraceGenerator
 		depth:     opts.Format.Depth,
 		spanCount: opts.Format.SpanCount,
 		duration:  opts.Format.Duration,
-		fielder:   NewFielder("test", opts.Format.SpanWidth),
+		fielder:   NewFielder(opts.Telemetry.Dataset, opts.Format.SpanWidth, opts.Format.Depth),
 		chans:     chans,
 		log:       log,
 		tracer:    tsender,
@@ -76,7 +76,7 @@ func (s *TraceGenerator) generate_spans(ctx context.Context, depth int, spancoun
 		durationThisSpan := durationRemaining / time.Duration(nspans-i)
 		durationRemaining -= durationThisSpan
 		time.Sleep(durationThisSpan / 2)
-		_, span := s.tracer.CreateSpan(ctx, "child", s.fielder)
+		_, span := s.tracer.CreateSpan(ctx, s.fielder.GetServiceName(depth), s.fielder)
 		s.generate_spans(ctx, depth-1, spancount-nspans, durationPerChild)
 		time.Sleep(durationThisSpan / 2)
 		span.Send()
@@ -85,7 +85,7 @@ func (s *TraceGenerator) generate_spans(ctx context.Context, depth int, spancoun
 
 func (s *TraceGenerator) generate_root(count int64, depth int, spancount int, timeRemaining time.Duration) {
 	ctx := context.Background()
-	ctx, root := s.tracer.CreateTrace(ctx, "root", s.fielder, count)
+	ctx, root := s.tracer.CreateTrace(ctx, s.fielder.GetServiceName(depth), s.fielder, count)
 	thisSpanDuration := time.Duration(rand.Intn(int(timeRemaining) / (spancount + 1)))
 	childDuration := (timeRemaining - thisSpanDuration)
 

@@ -26,7 +26,7 @@ type SenderOTel struct {
 	shutdown func()
 }
 
-func otelTracesFromURL(u url.URL) string {
+func otelTracesFromURL(u *url.URL) string {
 	target := fmt.Sprintf("%s://%s", u.Scheme, u.Host)
 	return target
 }
@@ -44,13 +44,9 @@ func (l OtelLogger) Fatalf(format string, args ...interface{}) {
 }
 
 func NewSenderOTel(log Logger, opts Options) *SenderOTel {
-	u := *opts.apihost
-	u.Path = "/v1/traces"
-
 	otelshutdown, err := otelconfig.ConfigureOpenTelemetry(
-		otelconfig.WithServiceName("loadtest"),
-		otelconfig.WithServiceVersion("0.0.1"),
-		otelconfig.WithTracesExporterEndpoint(otelTracesFromURL(u)),
+		otelconfig.WithServiceName(opts.Telemetry.Dataset),
+		otelconfig.WithTracesExporterEndpoint(otelTracesFromURL(opts.apihost)),
 		otelconfig.WithTracesExporterInsecure(opts.Telemetry.Insecure),
 		otelconfig.WithMetricsEnabled(false),
 		otelconfig.WithLogLevel(opts.LogLevel),
@@ -63,7 +59,7 @@ func NewSenderOTel(log Logger, opts Options) *SenderOTel {
 		log.Fatal("failure configuring otel: %v", err)
 	}
 	return &SenderOTel{
-		tracer:   otel.Tracer("test"),
+		tracer:   otel.Tracer(ResourceLibrary, trace.WithInstrumentationVersion(ResourceVersion)),
 		shutdown: otelshutdown,
 	}
 }
@@ -73,7 +69,7 @@ func (t *SenderOTel) Close() {
 }
 
 func (t *SenderOTel) CreateTrace(ctx context.Context, name string, fielder *Fielder, count int64) (context.Context, Sendable) {
-	ctx, root := t.tracer.Start(ctx, "root")
+	ctx, root := t.tracer.Start(ctx, name)
 	fielder.AddFields(root, count)
 	var ots OTelSendable
 	ots.Span = root
