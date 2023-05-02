@@ -84,6 +84,7 @@ Fields in a span will be randomly selected between the following types:
  - string (from list)
  - string (random min/max length)
  - bool
+
 In addition, every span will always have the following fields:
  - service name
  - trace id
