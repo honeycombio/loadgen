@@ -124,7 +124,7 @@ func main() {
 	log := NewLogger(args.DebugLevel())
 	args.apihost = parseHost(log, args.Telemetry.Host, args.Telemetry.Insecure)
 
-	log.Warn("host: %s, dataset: %s, apikey: ...%4.4s\n", args.apihost.String(), args.Telemetry.Dataset, args.Telemetry.APIKey)
+	log.Info("host: %s, dataset: %s, apikey: ...%4.4s\n", args.apihost.String(), args.Telemetry.Dataset, args.Telemetry.APIKey)
 
 	var sender Sender
 	switch args.Output.Sender {

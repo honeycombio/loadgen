@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"math/rand"
 	"sync"
 	"time"
@@ -86,7 +85,6 @@ func (s *TraceGenerator) generate_spans(ctx context.Context, depth int, spancoun
 		}
 		spancounts[rand.Intn(nspans)] += count
 	}
-	fmt.Printf("depth: %d spancount: %d nspans: %d spancounts: %v\n", depth, spancount, nspans, spancounts)
 
 	durationRemaining := time.Duration(rand.Intn(int(timeRemaining) / (spancount + 1)))
 	durationPerChild := (timeRemaining - durationRemaining) / time.Duration(nspans)
