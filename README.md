@@ -1,6 +1,8 @@
 # loadgen
 
-## A flexible, Honeycomb-aware Telemetry load generator for traces
+**A flexible, Honeycomb-aware Telemetry load generator for traces**
+
+## About
 
 `loadgen` generates telemetry loads for performance testing, load testing, and
 functionality testing. It allows you to specify the number of spans in a trace,
@@ -13,54 +15,40 @@ it ramps up and down to the target rate.
 It can generate traces in Honeycomb's proprietary protocol as well as all the
 OTel-standard protocols, and it can send them to Honeycomb or any OTel agent.
 
+For more information on why we felt we needed this, see [the Motivation section](#Motivation).
+
 ## Quickstart
 
-Assuming you have a recent version of Go installed:
+You should have a recent version of Go installed.
 
 Install:
-`go install github.com/honeycombio/loadgen`
+```bash
+go install github.com/honeycombio/loadgen
+```
 
 Get Usage information:
-`loadgen -h`
+```bash
+loadgen -h
+```
 
 Generate a single trace, 3 spans deep, and print it to the console:
-`
+```bash
+go run . --sender=print --tracecount=1 --depth=3 --spanwidth=3 --spancount=1
+```
 
-Send 3 traces to Honeycomb's production service, assuming you have an API key in the environment as HONEYCOMB_API_KEY:
-`loadgen --dataset=loadtest --tracecount=3`
+Send 3 traces to Honeycomb in the `loadtest` dataset, assuming you have an API key in the environment as HONEYCOMB_API_KEY:
+```bash
+loadgen --dataset=loadtest --tracecount=3
+```
 
-Send 100 deep traces per second for 10 seconds, with ramp times of 5 seconds
-`loadgen --dataset=loadtest --tps=100 --depth=10 --spancount=10 --maxtime=10s --ramp=5s`
-
-## Motivation
-
-We wanted a fast, easy-to-control tool that can send large quantities of traces
-of variable shape, using either Honeycomb or OpenTelemetry.
-
-The exact content of the traces isn't that important, but it is important to be
-able to control it in a variety of ways. We wanted to be able to send simple
-spans, or complex, deeply-nested traces, or shallow-but-wide traces. We wanted
-to be able to control the number of fields in a trace, but we don't want them to
-be purely random, but to have consistent datatypes and content shape.
-
-We wanted to be able to send large volumes of traces to do load testing. That
-also includes being able to ramp up and ramp down the volume at predictable
-rates.
-
-And we wanted it to be easy to install and use on a variety of platforms without
-a lot of fiddling.
-
-There were alternatives:
-
-* The OTel telemetrygen tool only generates very simple traces and doesn't support Honeycomb format directly.
-* The Locust load testing tool is very controllable, but requires installing Python and a virtual environment, and while it's fairly straightforward to generate Honeycomb trace data, it's much harder to make it do OpenTelemetry.
-* Honeycomb has several internal tools designed to demonstrate the breadth and variety of our libraries, but they don't have a lot of control over their output and require setting up a complex set of containers.
-
-In short, none of these met most of the goals, so a new tool seemed justified.
+Send 100 traces per second for 10 seconds, with ramp times of 5 seconds. The traces will be 10 spans deep with 8 extra fields.
+```bash
+loadgen --dataset=loadtest --tps=100 --depth=10 --spancount=10 --spanwidth=8 --maxtime=10s --ramp=5s
+```
 
 ## Details
 
-loadgen generates telemetry trace loads for performance testing. It can send
+`loadgen` generates telemetry trace loads for performance testing. It can send
 traces to honeycomb or to a local agent, and it can generate OTLP or
 Honeycomb-formatted traces. It's highly configurable:
 
@@ -110,3 +98,29 @@ Functionally, the system works by spinning up a number of goroutines, each of wh
 Ramp up and down are handled only by increasing or decreasing the number of goroutines.
 
 To mix different kinds of traces, or send traces to multiple datasets, use multiple loadgen processes.
+
+## Motivation
+
+We wanted a fast, easy-to-control tool that can send large quantities of traces
+of variable shape, using either Honeycomb or OpenTelemetry.
+
+The exact content of the traces isn't that important, but it is important to be
+able to control it in a variety of ways. We wanted to be able to send simple
+spans, or complex, deeply-nested traces, or shallow-but-wide traces. We wanted
+to be able to control the number of fields in a trace, but we don't want them to
+be purely random, but to have consistent datatypes and content shape.
+
+We wanted to be able to send large volumes of traces to do load testing. That
+also includes being able to ramp up and ramp down the volume at predictable
+rates.
+
+And we wanted it to be easy to install and use on a variety of platforms without
+a lot of fiddling.
+
+There were alternatives:
+
+* The OTel telemetrygen tool only generates very simple traces and doesn't support Honeycomb format directly.
+* The Locust load testing tool is very controllable, but requires installing Python and a virtual environment, and while it's fairly straightforward to generate Honeycomb trace data, it's much harder to make it do OpenTelemetry.
+* Honeycomb has several internal tools designed to demonstrate the breadth and variety of our libraries, but they don't have a lot of control over their output and require setting up a complex set of containers.
+
+In short, none of these met most of the goals, so a new tool seemed justified.
