@@ -1,0 +1,23 @@
+name: Create helm chart issue on release
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+jobs:
+  create_issue:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create an issue
+        uses: actions-ecosystem/action-create-issue@v1
+        with:
+          github_token: ${{ secrets.GHPROJECTS_TOKEN }}
+          repo: honeycombio/helm-charts
+          title: Bump Refinery to Latest Version
+          body: |
+            ## Bump Refinery
+
+            Update Refinery to latest version
+
+          labels: |
+            type: dependencies
+            status: oncall
