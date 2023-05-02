@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/signal"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/goware/urlx"
@@ -16,7 +17,7 @@ var ResourceVersion = "dev"
 
 type Options struct {
 	Telemetry struct {
-		Host     string `long:"host" description:"the url of the host to receive the telemetry (or honeycomb, dogfood, localhost)" default:"honeycomb"`
+		Host     string `long:"host" description:"the url of the host to receive the telemetry (or honeycomb, dogfood, local)" default:"honeycomb"`
 		Insecure bool   `long:"insecure" description:"use this for insecure http (not https) connections"`
 		Dataset  string `long:"dataset" description:"sends all traces to the given dataset" env:"HONEYCOMB_DATASET"`
 		APIKey   string `long:"apikey" description:"the honeycomb API key" env:"HONEYCOMB_API_KEY"`
@@ -26,15 +27,18 @@ type Options struct {
 		SpanCount int           `long:"spancount" description:"the average number of spans in a trace" default:"3"`
 		SpanWidth int           `long:"spanwidth" description:"the average number of random fields in a span beyond the standard ones" default:"5"`
 		Duration  time.Duration `long:"duration" description:"the duration of a trace" default:"1s"`
-	} `group:"Format Options"`
+	} `group:"Trace Format Options"`
 	Quantity struct {
-		TPS        int           `long:"tps" description:"the number of traces to generate per second" default:"1"`
-		TraceCount int64         `long:"tracecount" description:"the maximum number of traces to generate (0 means no limit)" default:"1"`
-		MaxTime    time.Duration `long:"maxtime" description:"the maximum time to spend generating traces (0 means no limit)" default:"60s"`
+		TPS        int           `long:"tps" description:"the maximum number of traces to generate per second" default:"1"`
+		TraceCount int64         `long:"tracecount" description:"the maximum number of traces to generate (0 means no limit, but if maxtime is not specified defaults to 1)" default:"0"`
+		MaxTime    time.Duration `long:"maxtime" description:"the maximum time to spend generating traces at max TPS (0 means no limit)" default:"0s"`
 		Ramp       time.Duration `long:"ramp" description:"seconds to spend ramping up or down to the desired TPS" default:"1s"`
 	} `group:"Quantity Options"`
-	Sender   string `long:"sender" description:"type of sender" choice:"honeycomb" choice:"otel" choice:"print" choice:"dummy" default:"honeycomb"`
-	LogLevel string `long:"loglevel" description:"level of logging" choice:"debug" choice:"info" choice:"warn" choice:"error" default:"error"`
+	Output struct {
+		Sender   string `long:"sender" description:"type of sender" choice:"honeycomb" choice:"otel" choice:"print" choice:"dummy" default:"honeycomb"`
+		Protocol string `long:"protocol" description:"for otel only, protocol to use" choice:"grpc" choice:"protobuf" choice:"json" default:"grpc"`
+	} `group:"Output Options"`
+	LogLevel string `long:"loglevel" description:"level of logging" choice:"debug" choice:"info" choice:"warn" choice:"error" default:"warn"`
 	apihost  *url.URL
 }
 
@@ -62,7 +66,7 @@ func parseHost(log Logger, host string, insecure bool) *url.URL {
 		host = "https://api.honeycomb.io:443"
 	case "dogfood":
 		host = "https://api-dogfood.honeycomb.io:443"
-	case "localhost":
+	case "local":
 		host = "http://localhost:8889"
 	default:
 	}
@@ -111,13 +115,18 @@ func main() {
 		}
 	}
 
+	// if we're not given a trace count or a max time, send only 1 trace
+	if args.Quantity.TraceCount == 0 && args.Quantity.MaxTime == 0 {
+		args.Quantity.TraceCount = 1
+	}
+
 	log := NewLogger(args.DebugLevel())
 	args.apihost = parseHost(log, args.Telemetry.Host, args.Telemetry.Insecure)
 
 	log.Warn("host: %s, dataset: %s, apikey: ...%4.4s\n", args.apihost.String(), args.Telemetry.Dataset, args.Telemetry.APIKey)
 
 	var sender Sender
-	switch args.Sender {
+	switch args.Output.Sender {
 	case "dummy":
 		sender = NewSenderDummy(log, args)
 	case "print":
@@ -125,14 +134,6 @@ func main() {
 	case "honeycomb":
 		sender = NewSenderHoneycomb(args)
 	case "otel":
-		// ctx := context.Background()
-
-		// var headers = map[string]string{
-		// 	"x-honeycomb-team":    args.APIKey,
-		// 	"x-honeycomb-dataset": args.Dataset,
-		// }
-		// host, insecure := formatURLForGRPC(u)
-		// sender = NewOTelHoneySender(log, args.Telemetry.Dataset, args.Telemetry.APIKey, host, insecure)
 		sender = NewSenderOTel(log, args)
 	}
 
@@ -143,7 +144,7 @@ func main() {
 
 	// catch ctrl-c and close the stop channel
 	sigch := make(chan os.Signal, 1)
-	signal.Notify(sigch, os.Interrupt, os.Kill)
+	signal.Notify(sigch, os.Interrupt, syscall.SIGTERM)
 	// we don't want a wait group for this one, or we'll never exit
 	go func() {
 		select {

@@ -44,7 +44,20 @@ func (l OtelLogger) Fatalf(format string, args ...interface{}) {
 }
 
 func NewSenderOTel(log Logger, opts Options) *SenderOTel {
+	var protocol otelconfig.Protocol
+	switch opts.Output.Protocol {
+	case "grpc":
+		protocol = otelconfig.ProtocolGRPC
+	case "protobuf":
+		protocol = otelconfig.ProtocolHTTPProto
+	case "json":
+		protocol = otelconfig.ProtocolHTTPJSON
+	default:
+		log.Fatal("unknown protocol: %s", opts.Output.Protocol)
+	}
+
 	otelshutdown, err := otelconfig.ConfigureOpenTelemetry(
+		otelconfig.WithExporterProtocol(protocol),
 		otelconfig.WithServiceName(opts.Telemetry.Dataset),
 		otelconfig.WithTracesExporterEndpoint(otelTracesFromURL(opts.apihost)),
 		otelconfig.WithTracesExporterInsecure(opts.Telemetry.Insecure),

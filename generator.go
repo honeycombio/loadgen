@@ -138,8 +138,10 @@ func (s *TraceGenerator) Generate(opts Options, wg *sync.WaitGroup, stop chan st
 	ticker := time.NewTicker(generatorInterval)
 	defer ticker.Stop()
 
-	stopTimer := time.NewTimer(opts.Quantity.MaxTime)
-	defer stopTimer.Stop()
+	// Create a long timer but stop it immediately so that we have a valid channel.
+	// We'll Reset it in the Starting state if they specified a max time.
+	stopTimer := time.NewTimer(time.Hour)
+	stopTimer.Stop()
 
 	for {
 		select {
@@ -157,6 +159,14 @@ func (s *TraceGenerator) Generate(opts Options, wg *sync.WaitGroup, stop chan st
 			case Starting:
 				if len(s.chans) >= int(ngenerators+0.5) { // make sure we don't get bit by floating point rounding
 					s.log.Info("all generators started, switching to Running state\n")
+					// if they want a timer, start it now
+					if opts.Quantity.MaxTime > 0 {
+						// could have used AfterFunc, but we're already in a goroutine with a select
+						// and it would have required a mutex to protect the state
+						stopTimer.Reset(opts.Quantity.MaxTime)
+						defer stopTimer.Stop()
+					}
+					// and change to run state
 					state = Running
 				} else {
 					s.log.Debug("starting new generator\n")

@@ -126,7 +126,7 @@ func getProcessID() int64 {
 // #   - string (random min/max length)
 // #   - bool
 
-func (r Rng) getRandomGenerators() []func() any {
+func (r Rng) getValueGenerators() []func() any {
 	return []func() any{
 		func() any { return r.Intn(100) },
 		func() any { return r.Bool() },
@@ -153,7 +153,7 @@ type Fielder struct {
 func NewFielder(name string, nfields, nservices int) *Fielder {
 	fields := make(map[string]func() any)
 	rng := NewRng(name)
-	gens := rng.getRandomGenerators()
+	gens := rng.getValueGenerators()
 	for i := 0; i < nfields; i++ {
 		fieldname := rng.Choice(adjectives) + "-" + rng.Choice(nouns)
 		fields[fieldname] = gens[rng.Intn(len(gens))]
