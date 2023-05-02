@@ -64,9 +64,9 @@ loadgen generates telemetry trace loads for performance testing. It can send
 traces to honeycomb or to a local agent, and it can generate OTLP or
 Honeycomb-formatted traces. It's highly configurable:
 
-- depth is the depth (nesting level) of a trace.
-- spancount is the number of spans in a trace.
-- spanwidth is the number of extra fields in a span beyond the standard ones
+- `Depth` is the depth (nesting level) of a trace.
+- `Spancount` is the number of spans in a trace.
+- `Spanwidth` is the number of extra fields in a span beyond the standard ones.
 
 If spancount is less than depth, the trace will be truncated at the depth of spancount.
 If spancount is greater than depth, some of the spans will have siblings.
@@ -100,15 +100,13 @@ In addition, every span will always have the following fields:
 
 - `Duration` is the average duration of a trace's root span in milliseconds; individual
 spans will be randomly assigned durations that will fit within the root span's duration.
-- `MaxTime` is the total amount of time to spend generating traces (0 means no limit)
-- `TracesPerSecond` is the number of root spans to generate per second
-- `TraceCount` is the maximum number of traces to generate; as soon as TraceCount is reached, the process stops (0 means no limit)
-- `Ramp` is the number of seconds to spend ramping up and down to the desired TPS
+- `MaxTime` is the total amount of time to spend generating traces (0 means no limit).
+- `TracesPerSecond` is the number of root spans to generate per second.
+- `TraceCount` is the maximum number of traces to generate; as soon as TraceCount is reached, the process stops (0 means no limit).
+- `Ramp` is the number of seconds to spend ramping up and down to the desired TPS.
 
-Functionally, the system works by spinning up a number of goroutines, each of
-which generates a stream of spans. The number of goroutines needed will equal
-tracesPerSecond * avgDuration. Rampup and rampdown are handled only by
-increasing or decreasing the number of goroutines.
+Functionally, the system works by spinning up a number of goroutines, each of which generates a stream of spans. The number of goroutines needed will equal `tracesPerSecond * Duration`.
 
-To mix different kinds of traces, or send traces to multiple datasets, use
-multiple loadgen processes.
+Ramp up and down are handled only by increasing or decreasing the number of goroutines.
+
+To mix different kinds of traces, or send traces to multiple datasets, use multiple loadgen processes.
