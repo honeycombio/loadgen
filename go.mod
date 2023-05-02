@@ -8,8 +8,8 @@ require (
 	github.com/honeycombio/beeline-go v1.11.1
 	github.com/honeycombio/otel-config-go v1.8.0
 	github.com/jessevdk/go-flags v1.5.0
-	go.opentelemetry.io/otel v1.15.0
-	go.opentelemetry.io/otel/trace v1.15.0
+	go.opentelemetry.io/otel v1.15.1
+	go.opentelemetry.io/otel/trace v1.15.1
 )
 
 require (
