@@ -160,9 +160,6 @@ func main() {
 		}
 	}()
 
-	// start the sender to receive spans and forward them appropriately
-	// sender.Run(wg, dest, stop)
-
 	// Start the trace counter to keep track of how many traces we've sent and
 	// stop the generator when we've reached the limit. We don't want to close
 	// counterChan until we're done with everything else because the generators

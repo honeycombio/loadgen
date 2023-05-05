@@ -52,9 +52,9 @@ loadgen --dataset=loadtest --tps=100 --depth=10 --nspans=10 --extra=8 --runtime=
 traces to honeycomb or to a local agent, and it can generate OTLP or
 Honeycomb-formatted traces. It's highly configurable:
 
-- `Depth` is the depth (nesting level) of a trace.
-- `NSpans` is the number of spans in a trace.
-- `Extra` is the number of extra fields in a span beyond the standard ones.
+- `--depth` sets the depth (nesting level) of a trace.
+- `--nspans` sets the number of spans in a trace.
+- `--extra` sets the number of extra fields in a span beyond the standard ones.
 
 If nspans is less than depth, the trace will be truncated at the depth of nspans.
 If nspans is greater than depth, some of the spans will have siblings.
@@ -86,11 +86,11 @@ In addition, every span will always have the following fields:
 
 ## Key adjustable values:
 
-- `tracetime` is the average duration of a trace's root span; individual spans will be randomly assigned durations that will fit within the root span's duration.
-- `runtime` is the total amount of time to spend generating traces (0 means no limit).
-- `tps` (traces per second) is the number of root spans to generate per second.
-- `tracecount` is the maximum number of traces to generate; as soon as TraceCount is reached, the process stops (0 means no limit).
-- `ramptime` is the duration to spend ramping up and down to the desired TPS.
+- `--tracetime` sets the average duration of a trace's root span; individual spans will be randomly assigned durations that will fit within the root spa--n's sets duration.
+- `--runtime` sets the total amount of time to spend generating traces (0 means no limit).
+- `--tps` (traces per second) sets the number of root spans to generate per second.
+- `--tracecount` sets the maximum number of traces to generate; as soon as TraceCount is reached, the process stops (0 means no limit).
+- `--ramptime` sets the duration to spend ramping up and down to the desired TPS.
 
 All durations are expressed as sequence of decimal numbers, each with optional fraction and a required unit suffix, such as "300ms", "1.5h" or "2h45m". Valid time units are "ns", "us" (or "µs"), "ms", "s", "m", "h".
 
