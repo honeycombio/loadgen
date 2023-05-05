@@ -23,16 +23,16 @@ type Options struct {
 		APIKey   string `long:"apikey" description:"the honeycomb API key" env:"HONEYCOMB_API_KEY"`
 	} `group:"Telemetry Options"`
 	Format struct {
-		Depth     int           `long:"depth" description:"the average depth of a trace" default:"3"`
-		SpanCount int           `long:"spancount" description:"the average number of spans in a trace" default:"3"`
-		SpanWidth int           `long:"spanwidth" description:"the average number of random fields in a span beyond the standard ones" default:"5"`
-		Duration  time.Duration `long:"duration" description:"the duration of a trace" default:"1s"`
+		Depth     int           `long:"depth" description:"the nesting depth of each trace" default:"3"`
+		NSpans    int           `long:"nspans" description:"the total number of spans in a trace" default:"3"`
+		Extra     int           `long:"extra" description:"the number of random fields in a span beyond the standard ones" default:"5"`
+		TraceTime time.Duration `long:"tracetime" description:"the duration of a trace" default:"1s"`
 	} `group:"Trace Format Options"`
 	Quantity struct {
 		TPS        int           `long:"tps" description:"the maximum number of traces to generate per second" default:"1"`
-		TraceCount int64         `long:"tracecount" description:"the maximum number of traces to generate (0 means no limit, but if maxtime is not specified defaults to 1)" default:"0"`
-		MaxTime    time.Duration `long:"maxtime" description:"the maximum time to spend generating traces at max TPS (0 means no limit)" default:"0s"`
-		Ramp       time.Duration `long:"ramp" description:"seconds to spend ramping up or down to the desired TPS" default:"1s"`
+		TraceCount int64         `long:"tracecount" description:"the maximum number of traces to generate (0 means no limit, but if runtime is not specified defaults to 1)" default:"0"`
+		RunTime    time.Duration `long:"runtime" description:"the maximum time to spend generating traces at max TPS (0 means no limit)" default:"0s"`
+		RampTime   time.Duration `long:"ramptime" description:"duration to spend ramping up or down to the desired TPS" default:"1s"`
 	} `group:"Quantity Options"`
 	Output struct {
 		Sender   string `long:"sender" description:"type of sender" choice:"honeycomb" choice:"otel" choice:"print" choice:"dummy" default:"honeycomb"`
@@ -118,8 +118,8 @@ func main() {
 		}
 	}
 
-	// if we're not given a trace count or a max time, send only 1 trace
-	if args.Quantity.TraceCount == 0 && args.Quantity.MaxTime == 0 {
+	// if we're not given a trace count or a runtime, send only 1 trace
+	if args.Quantity.TraceCount == 0 && args.Quantity.RunTime == 0 {
 		args.Quantity.TraceCount = 1
 	}
 

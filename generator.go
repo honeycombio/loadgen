@@ -25,14 +25,14 @@ const (
 )
 
 type TraceGenerator struct {
-	depth     int
-	spanCount int
-	duration  time.Duration
-	fielder   *Fielder
-	chans     []chan struct{}
-	mut       sync.RWMutex
-	log       Logger
-	tracer    Sender
+	depth    int
+	nspans   int
+	duration time.Duration
+	fielder  *Fielder
+	chans    []chan struct{}
+	mut      sync.RWMutex
+	log      Logger
+	tracer   Sender
 }
 
 // make sure it implements Generator
@@ -41,56 +41,56 @@ var _ Generator = (*TraceGenerator)(nil)
 func NewTraceGenerator(tsender Sender, log Logger, opts Options) *TraceGenerator {
 	chans := make([]chan struct{}, 0)
 	return &TraceGenerator{
-		depth:     opts.Format.Depth,
-		spanCount: opts.Format.SpanCount,
-		duration:  opts.Format.Duration,
-		fielder:   NewFielder(opts.Seed, opts.Format.SpanWidth, opts.Format.Depth),
-		chans:     chans,
-		log:       log,
-		tracer:    tsender,
+		depth:    opts.Format.Depth,
+		nspans:   opts.Format.NSpans,
+		duration: opts.Format.TraceTime,
+		fielder:  NewFielder(opts.Seed, opts.Format.Extra, opts.Format.Depth),
+		chans:    chans,
+		log:      log,
+		tracer:   tsender,
 	}
 }
 
 // generate_spans generates a list of spans with the given depth and spancount
 // it is recursive and expects spans[0] to be the root span
-// - depth is the average depth (nesting level) of a trace.
-// - spancount is the average number of spans in a trace.
-// If spancount is less than depth, the trace will be truncated at spancount.
-// If spancount is greater than depth, some of the children will have siblings.
-func (s *TraceGenerator) generate_spans(ctx context.Context, depth int, spancount int, timeRemaining time.Duration) {
-	if depth == 0 || spancount == 0 {
+// - depth is the depth (nesting level) of a trace.
+// - nspans is the number of spans in a trace.
+// If nspans is less than depth, the trace will be truncated at nspans.
+// If nspans is greater than depth, some of the children will have siblings.
+func (s *TraceGenerator) generate_spans(ctx context.Context, depth int, nspans int, timeRemaining time.Duration) {
+	if depth == 0 || nspans == 0 {
 		return
 	}
-	// nspans is the number of spans at this level
-	nspans := 1
-	if spancount > depth {
+
+	spansAtThisLevel := 1
+	if nspans > depth {
 		// there is some chance that this level will have multiple spans based on the difference
-		// between spancount and depth. (but we'll override this if it's a root span)
-		// nspans is always between 1 and spancount
-		nspans = 1 + rand.Intn(spancount-depth)
+		// between nspans and depth. (but we'll override this if it's a root span)
+		// nspans is always between 1 and nspans
+		spansAtThisLevel = 1 + rand.Intn(nspans-depth)
 	}
 
 	spancounts := make([]int, 0)
-	if nspans == 1 {
+	if spansAtThisLevel == 1 {
 		// if there's only one span, give it all the counts
-		spancounts = append(spancounts, spancount)
+		spancounts = append(spancounts, nspans)
 	} else {
 		// split the counts among the spans at this level
 		// we take a random portion of the counts for each span, then put the leftovers in a random span
-		count := spancount
-		spansPerPeer := spancount / nspans // always at least 1
-		for i := 0; i < nspans; i++ {
+		count := nspans
+		spansPerPeer := nspans / spansAtThisLevel // always at least 1
+		for i := 0; i < spansAtThisLevel; i++ {
 			spancounts = append(spancounts, rand.Intn(spansPerPeer)+1)
 			count -= spancounts[i]
 		}
-		spancounts[rand.Intn(nspans)] += count
+		spancounts[rand.Intn(spansAtThisLevel)] += count
 	}
 
-	durationRemaining := time.Duration(rand.Intn(int(timeRemaining) / (spancount + 1)))
-	durationPerChild := (timeRemaining - durationRemaining) / time.Duration(nspans)
+	durationRemaining := time.Duration(rand.Intn(int(timeRemaining) / (nspans + 1)))
+	durationPerChild := (timeRemaining - durationRemaining) / time.Duration(spansAtThisLevel)
 
-	for i := 0; i < nspans; i++ {
-		durationThisSpan := durationRemaining / time.Duration(nspans-i)
+	for i := 0; i < spansAtThisLevel; i++ {
+		durationThisSpan := durationRemaining / time.Duration(spansAtThisLevel-i)
 		durationRemaining -= durationThisSpan
 		time.Sleep(durationThisSpan / 2)
 		_, span := s.tracer.CreateSpan(ctx, s.fielder.GetServiceName(depth), s.fielder)
@@ -100,14 +100,14 @@ func (s *TraceGenerator) generate_spans(ctx context.Context, depth int, spancoun
 	}
 }
 
-func (s *TraceGenerator) generate_root(count int64, depth int, spancount int, timeRemaining time.Duration) {
+func (s *TraceGenerator) generate_root(count int64, depth int, nspans int, timeRemaining time.Duration) {
 	ctx := context.Background()
 	ctx, root := s.tracer.CreateTrace(ctx, s.fielder.GetServiceName(depth), s.fielder, count)
-	thisSpanDuration := time.Duration(rand.Intn(int(timeRemaining) / (spancount + 1)))
+	thisSpanDuration := time.Duration(rand.Intn(int(timeRemaining) / (nspans + 1)))
 	childDuration := (timeRemaining - thisSpanDuration)
 
 	time.Sleep(thisSpanDuration / 2)
-	s.generate_spans(ctx, depth-1, spancount-1, childDuration)
+	s.generate_spans(ctx, depth-1, nspans-1, childDuration)
 	time.Sleep(thisSpanDuration / 2)
 	root.Send()
 }
@@ -118,7 +118,7 @@ func (s *TraceGenerator) generate_root(count int64, depth int, spancount int, ti
 func (s *TraceGenerator) generator(wg *sync.WaitGroup, counter chan int64) {
 	s.mut.Lock()
 	depth := s.depth
-	spanCount := s.spanCount
+	nspans := s.nspans
 	duration := s.duration
 	stop := make(chan struct{})
 	s.chans = append(s.chans, stop)
@@ -135,7 +135,7 @@ func (s *TraceGenerator) generator(wg *sync.WaitGroup, counter chan int64) {
 			// generate a trace if we haven't been stopped by the counter
 			select {
 			case count := <-counter:
-				s.generate_root(count, depth, spanCount, duration)
+				s.generate_root(count, depth, nspans, duration)
 			default:
 				// do nothing, we're done, and the stop will be caught by the outer select
 			}
@@ -146,7 +146,7 @@ func (s *TraceGenerator) generator(wg *sync.WaitGroup, counter chan int64) {
 func (s *TraceGenerator) Generate(opts Options, wg *sync.WaitGroup, stop chan struct{}, counter chan int64) {
 	defer wg.Done()
 	ngenerators := float64(opts.Quantity.TPS) / s.TPS()
-	uSgeneratorInterval := float64(opts.Quantity.Ramp.Microseconds()) / ngenerators
+	uSgeneratorInterval := float64(opts.Quantity.RampTime.Microseconds()) / ngenerators
 	generatorInterval := time.Duration(uSgeneratorInterval) * time.Microsecond
 
 	s.log.Info("ngenerators: %f interval: %s\n", ngenerators, generatorInterval)
@@ -177,10 +177,10 @@ func (s *TraceGenerator) Generate(opts Options, wg *sync.WaitGroup, stop chan st
 				if len(s.chans) >= int(ngenerators+0.5) { // make sure we don't get bit by floating point rounding
 					s.log.Info("all generators started, switching to Running state\n")
 					// if they want a timer, start it now
-					if opts.Quantity.MaxTime > 0 {
+					if opts.Quantity.RunTime > 0 {
 						// could have used AfterFunc, but we're already in a goroutine with a select
 						// and it would have required a mutex to protect the state
-						stopTimer.Reset(opts.Quantity.MaxTime)
+						stopTimer.Reset(opts.Quantity.RunTime)
 						defer stopTimer.Stop()
 					}
 					// and change to run state

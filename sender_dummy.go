@@ -6,7 +6,7 @@ import (
 )
 
 type DummySender struct {
-	spancount int
+	nspans    int
 	rootspans int
 	log       Logger
 }
@@ -24,7 +24,7 @@ func (h *DummySender) Run(wg *sync.WaitGroup, spans chan *Span, stop chan struct
 			case span := <-spans:
 				h.send(span)
 			case <-stop:
-				h.log.Warn("dummysender sent %d spans with %d root spans\n", h.spancount, h.rootspans)
+				h.log.Warn("dummysender sent %d spans with %d root spans\n", h.nspans, h.rootspans)
 				return
 			}
 		}
@@ -35,7 +35,7 @@ func (h *DummySender) send(span *Span) {
 	if span.IsRootSpan() {
 		h.rootspans++
 	}
-	h.spancount++
+	h.nspans++
 }
 
 type DummySendable struct{}
@@ -45,7 +45,7 @@ func (s DummySendable) Send() {
 
 type SenderDummy struct {
 	tracecount int
-	spancount  int
+	nspans     int
 	log        Logger
 }
 
@@ -57,16 +57,16 @@ func NewSenderDummy(log Logger, opts Options) Sender {
 }
 
 func (t *SenderDummy) Close() {
-	t.log.Warn("sender sent %d traces with %d spans\n", t.tracecount, t.spancount)
+	t.log.Warn("sender sent %d traces with %d spans\n", t.tracecount, t.nspans)
 }
 
 func (t *SenderDummy) CreateTrace(ctx context.Context, name string, fielder *Fielder, count int64) (context.Context, Sendable) {
 	t.tracecount++
-	t.spancount++
+	t.nspans++
 	return ctx, DummySendable{}
 }
 
 func (t *SenderDummy) CreateSpan(ctx context.Context, name string, fielder *Fielder) (context.Context, Sendable) {
-	t.spancount++
+	t.nspans++
 	return ctx, DummySendable{}
 }

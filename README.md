@@ -33,7 +33,7 @@ loadgen -h
 
 Generate a single trace, 3 spans deep, and print it to the console:
 ```bash
-go run . --sender=print --tracecount=1 --depth=3 --spanwidth=3 --spancount=1
+go run . --sender=print --tracecount=1 --depth=3 --nspans=3
 ```
 
 Send 3 traces to Honeycomb in the `loadtest` dataset, assuming you have an API key in the environment as HONEYCOMB_API_KEY:
@@ -43,7 +43,7 @@ loadgen --dataset=loadtest --tracecount=3
 
 Send 100 traces per second for 10 seconds, with ramp times of 5 seconds. The traces will be 10 spans deep with 8 extra fields.
 ```bash
-loadgen --dataset=loadtest --tps=100 --depth=10 --spancount=10 --spanwidth=8 --maxtime=10s --ramp=5s
+loadgen --dataset=loadtest --tps=100 --depth=10 --nspans=10 --extra=8 --runtime=10s --ramptime=5s
 ```
 
 ## Details
@@ -53,11 +53,11 @@ traces to honeycomb or to a local agent, and it can generate OTLP or
 Honeycomb-formatted traces. It's highly configurable:
 
 - `Depth` is the depth (nesting level) of a trace.
-- `Spancount` is the number of spans in a trace.
-- `Spanwidth` is the number of extra fields in a span beyond the standard ones.
+- `NSpans` is the number of spans in a trace.
+- `Extra` is the number of extra fields in a span beyond the standard ones.
 
-If spancount is less than depth, the trace will be truncated at the depth of spancount.
-If spancount is greater than depth, some of the spans will have siblings.
+If nspans is less than depth, the trace will be truncated at the depth of nspans.
+If nspans is greater than depth, some of the spans will have siblings.
 
 The names and types of all extra (random) fields will be consistent for a given
 dataset, even across runs of loadgen so that datasets have longterm consistency.
@@ -86,11 +86,11 @@ In addition, every span will always have the following fields:
 
 ## Key adjustable values:
 
-- `Duration` is the average duration of a trace's root span; individual spans will be randomly assigned durations that will fit within the root span's duration.
-- `MaxTime` is the total amount of time to spend generating traces (0 means no limit).
-- `TracesPerSecond` is the number of root spans to generate per second.
-- `TraceCount` is the maximum number of traces to generate; as soon as TraceCount is reached, the process stops (0 means no limit).
-- `Ramp` is the number of seconds to spend ramping up and down to the desired TPS.
+- `tracetime` is the average duration of a trace's root span; individual spans will be randomly assigned durations that will fit within the root span's duration.
+- `runtime` is the total amount of time to spend generating traces (0 means no limit).
+- `tps` (traces per second) is the number of root spans to generate per second.
+- `tracecount` is the maximum number of traces to generate; as soon as TraceCount is reached, the process stops (0 means no limit).
+- `ramptime` is the duration to spend ramping up and down to the desired TPS.
 
 All durations are expressed as sequence of decimal numbers, each with optional fraction and a required unit suffix, such as "300ms", "1.5h" or "2h45m". Valid time units are "ns", "us" (or "µs"), "ms", "s", "m", "h".
 

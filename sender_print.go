@@ -51,8 +51,8 @@ func (s *PrintSendable) Send() {
 }
 
 type SenderPrint struct {
-	spancount  int
 	tracecount int
+	nspans     int
 	log        Logger
 }
 
@@ -63,14 +63,14 @@ func NewSenderPrint(log Logger, opts Options) Sender {
 }
 
 func (t *SenderPrint) Close() {
-	t.log.Warn("sender sent %d traces with %d spans\n", t.tracecount, t.spancount)
+	t.log.Warn("sender sent %d traces with %d spans\n", t.tracecount, t.nspans)
 }
 
 type PrintKey string
 
 func (t *SenderPrint) CreateTrace(ctx context.Context, name string, fielder *Fielder, count int64) (context.Context, Sendable) {
 	t.tracecount++
-	t.spancount++
+	t.nspans++
 	tinfo := &traceInfo{
 		TraceId:  randID(6),
 		SpanId:   randID(4),
@@ -86,7 +86,7 @@ func (t *SenderPrint) CreateTrace(ctx context.Context, name string, fielder *Fie
 }
 
 func (t *SenderPrint) CreateSpan(ctx context.Context, name string, fielder *Fielder) (context.Context, Sendable) {
-	t.spancount++
+	t.nspans++
 	tinfo := ctx.Value(PrintKey("trace")).(*traceInfo)
 	ctx = context.WithValue(ctx, PrintKey("trace"), tinfo.span(tinfo.SpanId))
 	return ctx, &PrintSendable{
