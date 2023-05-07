@@ -25,7 +25,7 @@ type Options struct {
 	Format struct {
 		Depth     int           `long:"depth" description:"the nesting depth of each trace" default:"3"`
 		NSpans    int           `long:"nspans" description:"the total number of spans in a trace" default:"3"`
-		Extra     int           `long:"extra" description:"the number of random fields in a span beyond the standard ones" default:"5"`
+		Extra     int           `long:"extra" description:"the number of random fields in a span beyond the standard ones" default:"0"`
 		TraceTime time.Duration `long:"tracetime" description:"the duration of a trace" default:"1s"`
 	} `group:"Trace Format Options"`
 	Quantity struct {
@@ -89,10 +89,10 @@ func parseHost(log Logger, host string, insecure bool) *url.URL {
 }
 
 func main() {
-	var args Options
+	var opts Options
 
-	parser := flags.NewParser(&args, flags.Default)
-	parser.Usage = `[OPTIONS]
+	parser := flags.NewParser(&opts, flags.Default)
+	parser.Usage = `[OPTIONS] [FIELD=VALUE]...
 
 	loadgen generates telemetry loads for performance testing, load testing, and
 	functionality testing. It allows you to specify the number of spans in a trace,
@@ -104,9 +104,24 @@ func main() {
 
 	It can generate OTLP or Honeycomb-formatted traces, and send them to Honeycomb
 	or (for OTLP) to any OTel agent.
+
+	You can specify fields to be added to each span by specifying them on the command
+	line. Each field should be specified as FIELD=VALUE. The value can be a constant
+	(and will be sent as the appropriate type), or a generator function starting with /.
+	Allowed generators are /i, /ir, /ig, /f, /fr, /fg, /s, /sx, /sw, /b, optionally
+	followed by a single number or a comma-separated pair of numbers.
+	Example generators:
+		- /s -- alphanumeric string of length 16
+		- /sx32 -- hex string of 32 characters
+		- /sw12 -- pronounceable words with cardinality 12
+		- /ir100 -- int in a range of 0 to 100
+		- /fg50,30 -- float in a gaussian distribution with mean 50 and stddev 30
+		- /b -- boolean, true or false
+	For full details, see https://github.com/honeycombio/loadgen/
 	`
 
-	if _, err := parser.Parse(); err != nil {
+	args, err := parser.Parse()
+	if err != nil {
 		switch flagsErr := err.(type) {
 		case *flags.Error:
 			if flagsErr.Type == flags.ErrHelp {
@@ -119,25 +134,31 @@ func main() {
 	}
 
 	// if we're not given a trace count or a runtime, send only 1 trace
-	if args.Quantity.TraceCount == 0 && args.Quantity.RunTime == 0 {
-		args.Quantity.TraceCount = 1
+	if opts.Quantity.TraceCount == 0 && opts.Quantity.RunTime == 0 {
+		opts.Quantity.TraceCount = 1
 	}
 
-	log := NewLogger(args.DebugLevel())
-	args.apihost = parseHost(log, args.Telemetry.Host, args.Telemetry.Insecure)
+	log := NewLogger(opts.DebugLevel())
 
-	log.Info("host: %s, dataset: %s, apikey: ...%4.4s\n", args.apihost.String(), args.Telemetry.Dataset, args.Telemetry.APIKey)
+	fielder, err := NewFielder(opts.Seed, args, opts.Format.Extra, opts.Format.Depth)
+	if err != nil {
+		log.Fatal("unable to create fields as specified: %s\n", err)
+	}
+
+	opts.apihost = parseHost(log, opts.Telemetry.Host, opts.Telemetry.Insecure)
+
+	log.Info("host: %s, dataset: %s, apikey: ...%4.4s\n", opts.apihost.String(), opts.Telemetry.Dataset, opts.Telemetry.APIKey)
 
 	var sender Sender
-	switch args.Output.Sender {
+	switch opts.Output.Sender {
 	case "dummy":
-		sender = NewSenderDummy(log, args)
+		sender = NewSenderDummy(log, opts)
 	case "print":
-		sender = NewSenderPrint(log, args)
+		sender = NewSenderPrint(log, opts)
 	case "honeycomb":
-		sender = NewSenderHoneycomb(args)
+		sender = NewSenderHoneycomb(opts)
 	case "otel":
-		sender = NewSenderOTel(log, args)
+		sender = NewSenderOTel(log, opts)
 	}
 
 	// create a stop channel so we can shut down gracefully
@@ -168,7 +189,7 @@ func main() {
 	counterChan := make(chan int64)
 	defer close(counterChan)
 	go func() {
-		if !TraceCounter(log, args.Quantity.TraceCount, counterChan, stop) {
+		if !TraceCounter(log, opts.Quantity.TraceCount, counterChan, stop) {
 			// give the senders a chance to finish sending
 			time.Sleep(1 * time.Second)
 			close(stop)
@@ -177,9 +198,9 @@ func main() {
 	}()
 
 	// start the load generator to create spans and send them on the source chan
-	var generator Generator = NewTraceGenerator(sender, log, args)
+	var generator Generator = NewTraceGenerator(sender, fielder, log, opts)
 	wg.Add(1)
-	go generator.Generate(args, wg, stop, counterChan)
+	go generator.Generate(opts, wg, stop, counterChan)
 
 	// wait for things to finish
 	wg.Wait()

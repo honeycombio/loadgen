@@ -4,7 +4,10 @@ import (
 	"fmt"
 	"math/rand"
 	"os"
+	"regexp"
 	"runtime"
+	"strconv"
+	"strings"
 
 	"github.com/dgryski/go-wyhash"
 	"go.opentelemetry.io/otel/attribute"
@@ -21,7 +24,7 @@ var spices = []string{
 	"nigella", "peppercorn", "wasabi",
 }
 
-// adjectives is a list of 30 common adjectives
+// adjectives is a list of common adjectives
 var adjectives = []string{
 	"able", "bad", "best", "better", "big", "black", "certain", "clear", "different", "early",
 	"easy", "economic", "federal", "free", "full", "good", "great", "hard", "high", "human",
@@ -31,7 +34,7 @@ var adjectives = []string{
 	"whole", "young",
 }
 
-// nouns is a list of 30 common nouns
+// nouns is a list of common nouns
 var nouns = []string{
 	"angle", "ant", "apple", "arch", "arm", "army", "baby", "bag", "ball", "band", "basin", "basket", "bath", "bed", "bee", "bell",
 	"berry", "bird", "blade", "board", "boat", "bone", "book", "boot", "bottle", "box", "boy", "brain", "brake", "branch", "brick", "bridge",
@@ -84,6 +87,30 @@ func (r Rng) GaussianInt(mean, stddev float64) int64 {
 	return int64(r.rng.NormFloat64()*stddev + mean)
 }
 
+func (r Rng) String(len int) string {
+	var b strings.Builder
+	for i := 0; i < len; i++ {
+		b.WriteByte(byte("abcdefghijklmnopqrstuvwxyz"[r.Int(0, 26)]))
+	}
+	return b.String()
+}
+
+func (r Rng) HexString(len int) string {
+	var b strings.Builder
+	for i := 0; i < len; i++ {
+		b.WriteByte(byte("0123456789abcdef"[r.Int(0, 16)]))
+	}
+	return b.String()
+}
+
+func (r Rng) WordPair() string {
+	return r.Choice(adjectives) + "-" + r.Choice(nouns)
+}
+
+func (r Rng) BoolWithProb(p int) bool {
+	return r.Int(0, 100) < int64(p)
+}
+
 func getGoroutineID() uint64 {
 	var buffer [31]byte
 	written := runtime.Stack(buffer[:], false)
@@ -116,26 +143,188 @@ func getProcessID() int64 {
 	return int64(os.Getpid())
 }
 
-// #   - int (rectangular min/max)
-// #   - int (gaussian mean/stddev)
-// #   - int upcounter
-// #   - int updowncounter (min/max)
-// #   - float (rectangular min/max)
-// #   - float (gaussian mean/stddev)
-// #   - string (from list)
-// #   - string (random min/max length)
-// #   - bool
-
 func (r Rng) getValueGenerators() []func() any {
 	return []func() any{
 		func() any { return r.Intn(100) },
-		func() any { return r.Bool() },
+		func() any { return r.BoolWithProb(99) },
+		func() any { return r.BoolWithProb(50) },
+		func() any { return r.BoolWithProb(1) },
 		func() any { return r.Int(-100, 100) },
 		func() any { return r.Float(0, 1000) },
 		func() any { return r.Float(0, 1) },
 		func() any { return r.GaussianInt(50, 30) },
 		func() any { return r.Gaussian(10000, 1000) },
 		func() any { return r.Gaussian(500, 300) },
+		func() any { return r.String(2) },
+		func() any { return r.String(5) },
+		func() any { return r.String(10) },
+		func() any { return r.String(4) + "-" + r.HexString(8) + "-" + r.String(4) },
+		func() any { return r.HexString(16) },
+	}
+}
+
+// parseUserFields expects a list of fields in the form of name=constant or name=/gen.
+// See README.md for more information.
+func parseUserFields(rng Rng, userfields []string) (map[string]func() any, error) {
+	constpat := regexp.MustCompile(`^([a-zA-Z0-9_]+)=([^/].*)$`)
+	genpat := regexp.MustCompile(`^([a-zA-Z0-9_]+)=/([ibfs][awxrg]?)([0-9.-]+)?(,[0-9.-]+)?$`)
+	// groups                             1                 2	         3       4
+	fields := make(map[string]func() any)
+	for _, field := range userfields {
+		// see if it's a constant
+		matches := constpat.FindStringSubmatch(field)
+		if matches != nil {
+			name := matches[1]
+			value := matches[2]
+			fields[name] = getConst(value)
+			continue
+		}
+
+		// see if it's a generator
+		matches = genpat.FindStringSubmatch(field)
+		if matches == nil {
+			return nil, fmt.Errorf("unparseable user field %s", field)
+		}
+		var err error
+		name := matches[1]
+		gentype := matches[2]
+		p1 := matches[3]
+		p2 := matches[4]
+		switch gentype {
+		case "i", "ir", "ig":
+			fields[name], err = getIntGen(rng, gentype, p1, p2)
+			if err != nil {
+				return nil, fmt.Errorf("invalid int in user field %s: %w", field, err)
+			}
+		case "f", "fr", "fg":
+			fields[name], err = getFloatGen(rng, gentype, p1, p2)
+			if err != nil {
+				return nil, fmt.Errorf("invalid float in user field %s: %w", field, err)
+			}
+		case "b":
+			n := 50
+			var err error
+			if p1 != "" {
+				n, err = strconv.Atoi(p1)
+				if err != nil || n < 0 || n > 100 {
+					return nil, fmt.Errorf("invalid bool option in %s", field)
+				}
+			}
+			fields[name] = func() any { return rng.BoolWithProb(n) }
+		case "s", "sw", "sx", "sa":
+			n := 16
+			if p1 != "" {
+				n, err = strconv.Atoi(p1)
+				if err != nil {
+					return nil, fmt.Errorf("invalid string option in %s", field)
+				}
+			}
+			switch gentype {
+			case "sw":
+				words := make([]string, n)
+				for i := 0; i < n; i++ {
+					words[i] = rng.WordPair()
+				}
+				fields[name] = func() any { return rng.Choice(words) }
+			case "sx":
+				fields[name] = func() any { return rng.HexString(n) }
+			default:
+				fields[name] = func() any { return rng.String(n) }
+			}
+		default:
+			return nil, fmt.Errorf("invalid generator type %s in field %s", gentype, field)
+		}
+	}
+	return fields, nil
+}
+
+func getConst(value string) func() any {
+	var gen func() any
+	if value == "true" {
+		gen = func() any { return true }
+	} else if value == "false" {
+		gen = func() any { return false }
+	} else {
+		if i, err := strconv.ParseInt(value, 10, 64); err == nil {
+			gen = func() any { return i }
+		} else if f, err := strconv.ParseFloat(value, 64); err == nil {
+			gen = func() any { return f }
+		} else {
+			gen = func() any { return value }
+		}
+	}
+	return gen
+}
+
+func gaussianDefaults(v1, v2 float64) (float64, float64) {
+	if v1 == 0 && v2 == 0 {
+		v1 = 100
+		v2 = 10
+	} else if v2 == 0 {
+		v2 = v1 / 10
+	}
+	return v1, v2
+}
+
+func getIntGen(rng Rng, gentype, p1, p2 string) (func() any, error) {
+	var v1, v2 int
+	var err error
+	if p1 == "" {
+		v1 = 0
+	} else {
+		v1, err = strconv.Atoi(p1)
+		if err != nil {
+			return nil, fmt.Errorf("%s is not an int", p1)
+		}
+	}
+	if p2 == "" || p2 == "," {
+		v2 = v1
+		v1 = 0
+	} else {
+		v2, err = strconv.Atoi(p2[1:])
+		if err != nil {
+			return nil, fmt.Errorf("%s is not an int", p2[:1])
+		}
+	}
+	if gentype == "ig" {
+		g1, g2 := gaussianDefaults(float64(v1), float64(v2))
+		return func() any { return rng.GaussianInt(g1, g2) }, nil
+	} else {
+		if v1 == 0 && v2 == 0 {
+			v2 = 100
+		}
+		return func() any { return rng.Int(v1, v2) }, nil
+	}
+}
+
+func getFloatGen(rng Rng, gentype, p1, p2 string) (func() any, error) {
+	var v1, v2 float64
+	var err error
+	if p1 == "" {
+		v1 = 0
+	} else {
+		v1, err = strconv.ParseFloat(p1, 64)
+		if err != nil {
+			return nil, fmt.Errorf("%s is not a float64", p1)
+		}
+	}
+	if p2 == "" || p2 == "," {
+		v2 = v1
+		v1 = 0
+	} else {
+		v2, err = strconv.ParseFloat(p2[1:], 64)
+		if err != nil {
+			return nil, fmt.Errorf("%s is not a float64", p2[:1])
+		}
+	}
+	if gentype == "fg" {
+		g1, g2 := gaussianDefaults(v1, v2)
+		return func() any { return rng.GaussianInt(g1, g2) }, nil
+	} else {
+		if v1 == 0 && v2 == 0 {
+			v2 = 100
+		}
+		return func() any { return rng.Float(v1, v2) }, nil
 	}
 }
 
@@ -144,18 +333,23 @@ type Fielder struct {
 	names  []string
 }
 
-// Fielder is an object that takes a name and a count and generates a map of
-// random fields based on using the name as a random seed. It takes two counts:
-// the number of fields to generate and the number of service names to generate. The field names are randomly generated by
+// Fielder is an object that takes a name and generates a map of
+// fields based on using the name as a random seed.
+// It takes a set of field specifications that are used to generate the fields.
+// It also takes two counts: the number of fields to generate and the number of
+// service names to generate. The field names are randomly generated by
 // combining an adjective and a noun and are consistent for a given fielder.
 // The field values are randomly generated.
 // Fielder also includes two special fields: goroutine_id and process_id.
-func NewFielder(seed string, nfields, nservices int) *Fielder {
-	fields := make(map[string]func() any)
+func NewFielder(seed string, userFields []string, nextras, nservices int) (*Fielder, error) {
 	rng := NewRng(seed)
 	gens := rng.getValueGenerators()
-	for i := 0; i < nfields; i++ {
-		fieldname := rng.Choice(adjectives) + "-" + rng.Choice(nouns)
+	fields, err := parseUserFields(rng, userFields)
+	if err != nil {
+		return nil, err
+	}
+	for i := 0; i < nextras; i++ {
+		fieldname := rng.WordPair()
 		fields[fieldname] = gens[rng.Intn(len(gens))]
 	}
 	fields["goroutine_id"] = func() any { return getGoroutineID() }
@@ -165,7 +359,7 @@ func NewFielder(seed string, nfields, nservices int) *Fielder {
 	for i := 0; i < nservices; i++ {
 		names[i] = rng.Choice(spices)
 	}
-	return &Fielder{fields: fields, names: names}
+	return &Fielder{fields: fields, names: names}, nil
 }
 
 func (f *Fielder) GetServiceName(n int) string {

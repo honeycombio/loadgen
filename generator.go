@@ -38,13 +38,13 @@ type TraceGenerator struct {
 // make sure it implements Generator
 var _ Generator = (*TraceGenerator)(nil)
 
-func NewTraceGenerator(tsender Sender, log Logger, opts Options) *TraceGenerator {
+func NewTraceGenerator(tsender Sender, fielder *Fielder, log Logger, opts Options) *TraceGenerator {
 	chans := make([]chan struct{}, 0)
 	return &TraceGenerator{
 		depth:    opts.Format.Depth,
 		nspans:   opts.Format.NSpans,
 		duration: opts.Format.TraceTime,
-		fielder:  NewFielder(opts.Seed, opts.Format.Extra, opts.Format.Depth),
+		fielder:  fielder,
 		chans:    chans,
 		log:      log,
 		tracer:   tsender,
