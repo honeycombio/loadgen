@@ -98,6 +98,7 @@ func (t *SenderOTel) CreateSpan(ctx context.Context, name string, fielder *Field
 			attribute.KeyValue{Key: "exception.type", Value: attribute.StringValue("error")},
 			attribute.KeyValue{Key: "exception.message", Value: attribute.StringValue("error message")},
 			attribute.KeyValue{Key: "exception.stacktrace", Value: attribute.StringValue("stacktrace")},
+			attribute.KeyValue{Key: "exception.escaped", Value: attribute.BoolValue(true)},
 		))
 	}
 	fielder.AddFields(span, 0)
