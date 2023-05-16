@@ -3,10 +3,12 @@ package main
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"net/url"
 
 	"github.com/honeycombio/otel-config-go/otelconfig"
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -91,6 +93,13 @@ func (t *SenderOTel) CreateTrace(ctx context.Context, name string, fielder *Fiel
 
 func (t *SenderOTel) CreateSpan(ctx context.Context, name string, fielder *Fielder) (context.Context, Sendable) {
 	ctx, span := t.tracer.Start(ctx, name)
+	if rand.Intn(10) == 0 {
+		span.AddEvent("exception", trace.WithAttributes(
+			attribute.KeyValue{Key: "exception.type", Value: attribute.StringValue("error")},
+			attribute.KeyValue{Key: "exception.message", Value: attribute.StringValue("error message")},
+			attribute.KeyValue{Key: "exception.stacktrace", Value: attribute.StringValue("stacktrace")},
+		))
+	}
 	fielder.AddFields(span, 0)
 	var ots OTelSendable
 	ots.Span = span
