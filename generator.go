@@ -53,11 +53,12 @@ func NewTraceGenerator(tsender Sender, fielder *Fielder, log Logger, opts Option
 
 // generate_spans generates a list of spans with the given depth and spancount
 // it is recursive and expects spans[0] to be the root span
-// - depth is the depth (nesting level) of a trace.
+// - level is the current depth of this span where 0 is the root span
+// - depth is the maximum depth (nesting level) of a trace -- how much deeper this trace will go
 // - nspans is the number of spans in a trace.
 // If nspans is less than depth, the trace will be truncated at nspans.
 // If nspans is greater than depth, some of the children will have siblings.
-func (s *TraceGenerator) generate_spans(ctx context.Context, depth int, nspans int, timeRemaining time.Duration) {
+func (s *TraceGenerator) generate_spans(ctx context.Context, level int, depth int, nspans int, timeRemaining time.Duration) {
 	if depth == 0 || nspans == 0 {
 		return
 	}
@@ -93,8 +94,8 @@ func (s *TraceGenerator) generate_spans(ctx context.Context, depth int, nspans i
 		durationThisSpan := durationRemaining / time.Duration(spansAtThisLevel-i)
 		durationRemaining -= durationThisSpan
 		time.Sleep(durationThisSpan / 2)
-		_, span := s.tracer.CreateSpan(ctx, s.fielder.GetServiceName(depth), s.fielder)
-		s.generate_spans(ctx, depth-1, spancounts[i]-1, durationPerChild)
+		childctx, span := s.tracer.CreateSpan(ctx, s.fielder.GetServiceName(depth), level, s.fielder)
+		s.generate_spans(childctx, level+1, depth-1, spancounts[i]-1, durationPerChild)
 		time.Sleep(durationThisSpan / 2)
 		span.Send()
 	}
@@ -107,7 +108,7 @@ func (s *TraceGenerator) generate_root(count int64, depth int, nspans int, timeR
 	childDuration := (timeRemaining - thisSpanDuration)
 
 	time.Sleep(thisSpanDuration / 2)
-	s.generate_spans(ctx, depth-1, nspans-1, childDuration)
+	s.generate_spans(ctx, 1, depth-1, nspans-1, childDuration)
 	time.Sleep(thisSpanDuration / 2)
 	root.Send()
 }

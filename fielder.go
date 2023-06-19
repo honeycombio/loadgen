@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"math"
 	"math/rand"
 	"os"
 	"regexp"
@@ -63,8 +64,18 @@ func (r Rng) Intn(n int) int64 {
 	return int64(r.rng.Intn(n))
 }
 
+// Chooses a random element from a slice of strings.
 func (r Rng) Choice(a []string) string {
 	return a[r.Intn(len(a))]
+}
+
+// Chooses a random element from a slice of strings, with a quadratic bias
+// towards the first elements.
+func (r Rng) QuadraticChoice(a []string) string {
+	sq := float64(len(a) * len(a))
+	rn := r.Float(0, sq)
+	choice := len(a) - int(math.Floor(math.Sqrt(rn))) - 1
+	return a[choice]
 }
 
 func (r Rng) Bool() bool {
@@ -72,7 +83,7 @@ func (r Rng) Bool() bool {
 }
 
 func (r Rng) Int(min, max int) int64 {
-	return int64(r.rng.Intn((max - min) + min))
+	return int64(r.rng.Intn(max-min) + min)
 }
 
 func (r Rng) Float(min, max float64) float64 {
@@ -167,8 +178,8 @@ func (r Rng) getValueGenerators() []func() any {
 // See README.md for more information.
 func parseUserFields(rng Rng, userfields []string) (map[string]func() any, error) {
 	constpat := regexp.MustCompile(`^([a-zA-Z0-9_]+)=([^/].*)$`)
-	genpat := regexp.MustCompile(`^([a-zA-Z0-9_]+)=/([ibfs][awxrg]?)([0-9.-]+)?(,[0-9.-]+)?$`)
-	// groups                             1                 2	         3       4
+	genpat := regexp.MustCompile(`^((?:[0-9]+\.)[a-zA-Z0-9_]+)=/([ibfs][awxrgq]?)([0-9.-]+)?(,[0-9.-]+)?$`)
+	// groups                                        1                 2	         3         4
 	fields := make(map[string]func() any)
 	for _, field := range userfields {
 		// see if it's a constant
@@ -211,7 +222,7 @@ func parseUserFields(rng Rng, userfields []string) (map[string]func() any, error
 				}
 			}
 			fields[name] = func() any { return rng.BoolWithProb(n) }
-		case "s", "sw", "sx", "sa":
+		case "s", "sw", "sx", "sa", "sq":
 			n := 16
 			if p1 != "" {
 				n, err = strconv.Atoi(p1)
@@ -221,11 +232,19 @@ func parseUserFields(rng Rng, userfields []string) (map[string]func() any, error
 			}
 			switch gentype {
 			case "sw":
+				// words with specified cardinality in a rectangular distribution
 				words := make([]string, n)
 				for i := 0; i < n; i++ {
 					words[i] = rng.WordPair()
 				}
 				fields[name] = func() any { return rng.Choice(words) }
+			case "sq":
+				// words with specified cardinality in a quadratic distribution
+				words := make([]string, n)
+				for i := 0; i < n; i++ {
+					words[i] = rng.WordPair()
+				}
+				fields[name] = func() any { return rng.QuadraticChoice(words) }
 			case "sx":
 				fields[name] = func() any { return rng.HexString(n) }
 			default:
@@ -366,22 +385,47 @@ func (f *Fielder) GetServiceName(n int) string {
 	return f.names[n%len(f.names)]
 }
 
-func (f *Fielder) GetFields(count int64) map[string]any {
+// Searches for a field name that includes a level marker.
+// These markers look like "1.fieldname" and are used to
+// indicate that the field should be included at a specific
+// level in the trace, where 0 is the root.
+func (f *Fielder) atLevel(name string, level int) (string, bool) {
+	keypat := regexp.MustCompile(`^([0-9]+)\.(.*$)`)
+	matches := keypat.FindStringSubmatch(name)
+	if len(matches) == 0 {
+		return name, true
+	}
+	keylevel, _ := strconv.Atoi(matches[1])
+	if keylevel == level {
+		return matches[2], true
+	}
+	return matches[2], false
+}
+
+func (f *Fielder) GetFields(count int64, level int) map[string]any {
 	fields := make(map[string]any)
 	if count != 0 {
 		fields["count"] = count
 	}
 	for k, v := range f.fields {
+		k, ok := f.atLevel(k, level)
+		if !ok {
+			continue
+		}
 		fields[k] = v()
 	}
 	return fields
 }
 
-func (f *Fielder) AddFields(span trace.Span, count int64) {
+func (f *Fielder) AddFields(span trace.Span, count int64, level int) {
 	if count != 0 {
 		span.SetAttributes(attribute.Int64("count", count))
 	}
 	for key, val := range f.fields {
+		key, ok := f.atLevel(key, level)
+		if !ok {
+			continue
+		}
 		switch v := val().(type) {
 		case int64:
 			span.SetAttributes(attribute.Int64(key, v))
