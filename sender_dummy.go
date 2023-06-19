@@ -66,7 +66,7 @@ func (t *SenderDummy) CreateTrace(ctx context.Context, name string, fielder *Fie
 	return ctx, DummySendable{}
 }
 
-func (t *SenderDummy) CreateSpan(ctx context.Context, name string, fielder *Fielder) (context.Context, Sendable) {
+func (t *SenderDummy) CreateSpan(ctx context.Context, name string, level int, fielder *Fielder) (context.Context, Sendable) {
 	t.nspans++
 	return ctx, DummySendable{}
 }

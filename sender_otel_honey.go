@@ -3,10 +3,12 @@ package main
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"net/url"
 
 	"github.com/honeycombio/otel-config-go/otelconfig"
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -83,15 +85,23 @@ func (t *SenderOTel) Close() {
 
 func (t *SenderOTel) CreateTrace(ctx context.Context, name string, fielder *Fielder, count int64) (context.Context, Sendable) {
 	ctx, root := t.tracer.Start(ctx, name)
-	fielder.AddFields(root, count)
+	fielder.AddFields(root, count, 0)
 	var ots OTelSendable
 	ots.Span = root
 	return ctx, ots
 }
 
-func (t *SenderOTel) CreateSpan(ctx context.Context, name string, fielder *Fielder) (context.Context, Sendable) {
+func (t *SenderOTel) CreateSpan(ctx context.Context, name string, level int, fielder *Fielder) (context.Context, Sendable) {
 	ctx, span := t.tracer.Start(ctx, name)
-	fielder.AddFields(span, 0)
+	if rand.Intn(10) == 0 {
+		span.AddEvent("exception", trace.WithAttributes(
+			attribute.KeyValue{Key: "exception.type", Value: attribute.StringValue("error")},
+			attribute.KeyValue{Key: "exception.message", Value: attribute.StringValue("error message")},
+			attribute.KeyValue{Key: "exception.stacktrace", Value: attribute.StringValue("stacktrace")},
+			attribute.KeyValue{Key: "exception.escaped", Value: attribute.BoolValue(false)},
+		))
+	}
+	fielder.AddFields(span, 0, level)
 	var ots OTelSendable
 	ots.Span = span
 	return ctx, ots

@@ -80,12 +80,12 @@ func (t *SenderPrint) CreateTrace(ctx context.Context, name string, fielder *Fie
 	return ctx, &PrintSendable{
 		Name:   name,
 		TInfo:  tinfo,
-		Fields: fielder.GetFields(count),
+		Fields: fielder.GetFields(count, 0),
 		log:    t.log,
 	}
 }
 
-func (t *SenderPrint) CreateSpan(ctx context.Context, name string, fielder *Fielder) (context.Context, Sendable) {
+func (t *SenderPrint) CreateSpan(ctx context.Context, name string, level int, fielder *Fielder) (context.Context, Sendable) {
 	t.nspans++
 	tinfo := ctx.Value(PrintKey("trace")).(*traceInfo)
 	ctx = context.WithValue(ctx, PrintKey("trace"), tinfo.span(tinfo.SpanId))
@@ -93,7 +93,7 @@ func (t *SenderPrint) CreateSpan(ctx context.Context, name string, fielder *Fiel
 		Name:      name,
 		TInfo:     tinfo.span(tinfo.SpanId),
 		StartTime: time.Now(),
-		Fields:    fielder.GetFields(0),
+		Fields:    fielder.GetFields(0, level),
 		log:       t.log,
 	}
 }

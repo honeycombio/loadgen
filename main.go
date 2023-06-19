@@ -113,10 +113,16 @@ func main() {
 	Example generators:
 		- /s -- alphanumeric string of length 16
 		- /sx32 -- hex string of 32 characters
-		- /sw12 -- pronounceable words with cardinality 12
+		- /sw12 -- pronounceable words with cardinality 12 with rectangular distribution
+		- /sq4 -- pronounceable words with cardinality 4 with quadratic distribution
 		- /ir100 -- int in a range of 0 to 100
 		- /fg50,30 -- float in a gaussian distribution with mean 50 and stddev 30
 		- /b -- boolean, true or false
+
+	Field names can be alphanumeric with underscores. If a field name is prefixed with
+	a number and a dot (e.g. 1.foo=bar) the field will only be injected into spans at
+	that level of nesting (where 0 is the root span).
+
 	For full details, see https://github.com/honeycombio/loadgen/
 	`
 

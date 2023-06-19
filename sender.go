@@ -31,6 +31,6 @@ type Sendable interface {
 
 type Sender interface {
 	CreateTrace(ctx context.Context, name string, fielder *Fielder, count int64) (context.Context, Sendable)
-	CreateSpan(ctx context.Context, name string, fielder *Fielder) (context.Context, Sendable)
+	CreateSpan(ctx context.Context, name string, level int, fielder *Fielder) (context.Context, Sendable)
 	Close()
 }
