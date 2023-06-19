@@ -126,9 +126,14 @@ more than one.
 |f, fr| rectangularly distributed floats | min (0)| max (100) |
 |fg | gaussian floats | mean (100)| stddev (10)|
 |s, sa| alphabetic string | length in chars (16)||
-| sw | pronounceable words | cardinality (16)||
+| sw | pronounceable words, rectangular distribution | cardinality (16)||
+| sq | pronounceable words, quadratic distribution | cardinality (16) ||
 | sx | hexadecimal string | length in chars (16)||
 |b | boolean | percentage true (50) ||
+
+The name can be alphanumeric + underscore. If it starts with a number and a dot,
+like `1.field`, the field will only be applied at the specified level of nesting,
+where `0` means the root span.
 
 ### Examples
 	* name=/s -- name is a string chosen from a list of words, cardinality is 16
@@ -137,6 +142,7 @@ more than one.
 	* name=/i100 -- name is an int chosen from a range of 0 to 100
 	* name=/ig50,30 -- name is an int chosen from a gaussian distribution with mean 50 and stddev 30
 	* name=/f-100,100 -- name is a float chosen from a range of -100 to 100
+	* 1.name=/sq9 -- name is words with cardinality 9, only on spans that are direct children of the root span
 
 ## Motivation
 
