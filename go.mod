@@ -5,7 +5,7 @@ go 1.20
 require (
 	github.com/dgryski/go-wyhash v0.0.0-20191203203029-c4841ae36371
 	github.com/goware/urlx v0.3.2
-	github.com/honeycombio/beeline-go v1.11.1
+	github.com/honeycombio/beeline-go v1.12.0
 	github.com/honeycombio/otel-config-go v1.10.0
 	github.com/jessevdk/go-flags v1.5.0
 	go.opentelemetry.io/otel v1.16.0
@@ -23,7 +23,7 @@ require (
 	github.com/go-ole/go-ole v1.2.6 // indirect
 	github.com/golang/protobuf v1.5.3 // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.15.2 // indirect
-	github.com/honeycombio/libhoney-go v1.18.0 // indirect
+	github.com/honeycombio/libhoney-go v1.19.0 // indirect
 	github.com/klauspost/compress v1.16.5 // indirect
 	github.com/lufia/plan9stats v0.0.0-20230326075908-cb1d2100619a // indirect
 	github.com/power-devops/perfstat v0.0.0-20221212215047-62379fc7944b // indirect
