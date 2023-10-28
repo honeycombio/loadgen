@@ -118,6 +118,9 @@ func main() {
 		- /ir100 -- int in a range of 0 to 100
 		- /fg50,30 -- float in a gaussian distribution with mean 50 and stddev 30
 		- /b -- boolean, true or false
+		- /u -- https url-like, no query string, two path segments; default cardinality is 10/10 but can be changed like /u3,20
+		- /uq -- as /u above, but with query string containing a random key word with a completely random value
+		- /st -- an http status code by default reflecting 95% 200s, 4% 400s, 1% 500s. 400s and 500s can be changed like /st10,0.1.
 
 	Field names can be alphanumeric with underscores. If a field name is prefixed with
 	a number and a dot (e.g. 1.foo=bar) the field will only be injected into spans at

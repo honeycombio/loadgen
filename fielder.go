@@ -174,12 +174,26 @@ func (r Rng) getValueGenerators() []func() any {
 	}
 }
 
+// getWordList returns a list of words with the specified cardinality;
+// if a source word list is specified and cardinality fits within it, it uses it.
+func getWordList(rng Rng, cardinality int, source []string) []string {
+	generator := rng.WordPair
+	if source != nil && len(source) >= cardinality {
+		generator = func() string { return rng.Choice(source) }
+	}
+	words := make([]string, cardinality)
+	for i := 0; i < cardinality; i++ {
+		words[i] = generator()
+	}
+	return words
+}
+
 // parseUserFields expects a list of fields in the form of name=constant or name=/gen.
 // See README.md for more information.
 func parseUserFields(rng Rng, userfields []string) (map[string]func() any, error) {
 	constpat := regexp.MustCompile(`^([a-zA-Z0-9_]+)=([^/].*)$`)
-	genpat := regexp.MustCompile(`^((?:[0-9]+\.)[a-zA-Z0-9_]+)=/([ibfs][awxrgq]?)([0-9.-]+)?(,[0-9.-]+)?$`)
-	// groups                                        1                 2	         3         4
+	genpat := regexp.MustCompile(`^((?:[0-9]+\.)?[a-zA-Z0-9_]+)=/([ibfsu][awxrgqt]?)([0-9.-]+)?(,[0-9.-]+)?$`)
+	// groups                                        1                   2	         3         4
 	fields := make(map[string]func() any)
 	for _, field := range userfields {
 		// see if it's a constant
@@ -233,23 +247,52 @@ func parseUserFields(rng Rng, userfields []string) (map[string]func() any, error
 			switch gentype {
 			case "sw":
 				// words with specified cardinality in a rectangular distribution
-				words := make([]string, n)
-				for i := 0; i < n; i++ {
-					words[i] = rng.WordPair()
-				}
+				words := getWordList(rng, n, nil)
 				fields[name] = func() any { return rng.Choice(words) }
 			case "sq":
 				// words with specified cardinality in a quadratic distribution
-				words := make([]string, n)
-				for i := 0; i < n; i++ {
-					words[i] = rng.WordPair()
-				}
+				words := getWordList(rng, n, nil)
 				fields[name] = func() any { return rng.QuadraticChoice(words) }
 			case "sx":
 				fields[name] = func() any { return rng.HexString(n) }
 			default:
 				fields[name] = func() any { return rng.String(n) }
 			}
+		case "u", "uq":
+			// Generate a URL-like string with a random path and possibly a query string
+			fields[name], err = getURLGen(rng, gentype, p1, p2)
+			if err != nil {
+				return nil, fmt.Errorf("invalid float in user field %s: %w", field, err)
+			}
+		case "st":
+			// Generate a semi-plausible mix of status codes; percentage of 400s and 500s can be controlled by the extra args
+			twos := 95.0
+			fours := 4.0
+			fives := 1.0
+			if p1 != "" {
+				fours, err = strconv.ParseFloat(p1, 64)
+				if err != nil {
+					return nil, fmt.Errorf("invalid float in user field %s: %w", field, err)
+				}
+			}
+			if p2 != "" {
+				fives, err = strconv.ParseFloat(p2[1:], 64)
+				if err != nil {
+					return nil, fmt.Errorf("invalid float in user field %s: %w", field, err)
+				}
+			}
+			twos = 100 - fours - fives
+			fields[name] = func() any {
+				r := rng.Float(0, 100)
+				if r < twos {
+					return rng.QuadraticChoice([]string{"200", "200", "200", "201", "202"})
+				} else if r < twos+fours {
+					return rng.QuadraticChoice([]string{"404", "400", "400", "400", "402", "429", "403"})
+				} else {
+					return "500"
+				}
+			}
+
 		default:
 			return nil, fmt.Errorf("invalid generator type %s in field %s", gentype, field)
 		}
@@ -324,7 +367,7 @@ func getFloatGen(rng Rng, gentype, p1, p2 string) (func() any, error) {
 	} else {
 		v1, err = strconv.ParseFloat(p1, 64)
 		if err != nil {
-			return nil, fmt.Errorf("%s is not a float64", p1)
+			return nil, fmt.Errorf("%s is not a number", p1)
 		}
 	}
 	if p2 == "" || p2 == "," {
@@ -333,7 +376,7 @@ func getFloatGen(rng Rng, gentype, p1, p2 string) (func() any, error) {
 	} else {
 		v2, err = strconv.ParseFloat(p2[1:], 64)
 		if err != nil {
-			return nil, fmt.Errorf("%s is not a float64", p2[:1])
+			return nil, fmt.Errorf("%s is not a number", p2[:1])
 		}
 	}
 	if gentype == "fg" {
@@ -344,6 +387,40 @@ func getFloatGen(rng Rng, gentype, p1, p2 string) (func() any, error) {
 			v2 = 100
 		}
 		return func() any { return rng.Float(v1, v2) }, nil
+	}
+}
+
+func getURLGen(rng Rng, gentype, p1, p2 string) (func() any, error) {
+	var c1 int = 3
+	var c2 int = 10
+	var err error
+	if p1 != "" {
+		c1, err = strconv.Atoi(p1)
+		if err != nil {
+			return nil, fmt.Errorf("%s is not a number", p1)
+		}
+	}
+	if p2 != "" && p2 != "," {
+		c2, err = strconv.Atoi(p2[1:])
+		if err != nil {
+			return nil, fmt.Errorf("%s is not a number", p2[:1])
+		}
+	}
+	path1words := getWordList(rng, c1, nouns)
+	path1 := func() string { return rng.Choice(path1words) }
+	path2 := func() string { return "" }
+	if c2 != 0 {
+		path2words := getWordList(rng, c2, adjectives)
+		path2 = func() string { return rng.Choice(path2words) }
+	}
+	if gentype == "uq" {
+		return func() any {
+			return "https://example.com/" + path1() + "/" + path2() + "?extra=" + rng.String(10)
+		}, nil
+	} else {
+		return func() any {
+			return "https://example.com/" + path1() + "/" + path2()
+		}, nil
 	}
 }
 
