@@ -121,15 +121,18 @@ more than one.
 
 |type|description|p1|p2|
 |----|---------|-|---|
-|i, ir| rectangularly distributed integers | min (0)| max (100)|
-|ig | gaussian integers | mean (100)| stddev (10)|
-|f, fr| rectangularly distributed floats | min (0)| max (100) |
-|fg | gaussian floats | mean (100)| stddev (10)|
-|s, sa| alphabetic string | length in chars (16)||
+| i, ir| rectangularly distributed integers | min (0)| max (100)|
+| ig | gaussian integers | mean (100)| stddev (10)|
+| f, fr| rectangularly distributed floats | min (0)| max (100) |
+| fg | gaussian floats | mean (100)| stddev (10)|
+| b | boolean | percentage true (50) ||
+| s, sa| alphabetic string | length in chars (16)||
 | sw | pronounceable words, rectangular distribution | cardinality (16)||
 | sq | pronounceable words, quadratic distribution | cardinality (16) ||
 | sx | hexadecimal string | length in chars (16)||
-|b | boolean | percentage true (50) ||
+| u | url-like (2 parts) | cardinality of 1st part (3) | cardinality of 2nd part (10) |
+| uq | url with random query | cardinality of 1st part (3) | cardinality of 2nd part (10) |
+| st | status code | percentage of 400s | percentage of 500s |
 
 The name can be alphanumeric + underscore. If it starts with a number and a dot,
 like `1.field`, the field will only be applied at the specified level of nesting,
@@ -143,6 +146,8 @@ where `0` means the root span.
 	* name=/ig50,30 -- name is an int chosen from a gaussian distribution with mean 50 and stddev 30
 	* name=/f-100,100 -- name is a float chosen from a range of -100 to 100
 	* 1.name=/sq9 -- name is words with cardinality 9, only on spans that are direct children of the root span
+	* url=/u10,10 -- simulate URLs for 10 services, each of which has 10 endpoints
+	* status=/st10,0.1 -- generate status codes where 10% are 400s and .1% are 500s
 
 ## Motivation
 
