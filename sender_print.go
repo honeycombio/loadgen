@@ -78,10 +78,11 @@ func (t *SenderPrint) CreateTrace(ctx context.Context, name string, fielder *Fie
 	}
 	ctx = context.WithValue(ctx, PrintKey("trace"), tinfo)
 	return ctx, &PrintSendable{
-		Name:   name,
-		TInfo:  tinfo,
-		Fields: fielder.GetFields(count, 0),
-		log:    t.log,
+		Name:      name,
+		TInfo:     tinfo,
+		StartTime: time.Now(),
+		Fields:    fielder.GetFields(count, 0),
+		log:       t.log,
 	}
 }
 
