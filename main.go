@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"net/url"
 	"os"
 	"os/signal"
@@ -83,7 +84,7 @@ func parseHost(log Logger, host string, insecure bool) *url.URL {
 	}
 	port := u.Port()
 	if port == "" {
-		port = "4317" // default GRPC port
+		u.Host = fmt.Sprintf("%s:4317", u.Host) // default GRPC port
 	}
 	return u
 }
