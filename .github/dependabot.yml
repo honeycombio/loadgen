@@ -16,3 +16,8 @@ updates:
     commit-message:
       prefix: "maint"
       include: "scope"
+    groups:
+      opentelemetry:
+        patterns:
+          - "go.opentelemetry.io/*"
+          - "github.com/honeycombio/otel-config-go"
