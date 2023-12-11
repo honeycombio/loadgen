@@ -5,6 +5,6 @@ jobs:
     runs-on: ubuntu-latest
     name: Apply common project labels
     steps:
-      - uses: honeycombio/oss-management-actions/labels@v1
+      - uses: honeycombio/oss-management/labels@v1
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
