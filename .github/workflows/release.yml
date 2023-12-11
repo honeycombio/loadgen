@@ -18,23 +18,4 @@ jobs:
           go-version: '^1.21.5'
       - uses: actions/checkout@v4
       - uses: ko-build/setup-ko@v0.6
-      - run: ko build
-  publish-release-yaml:
-    name: Publish Release YAML
-    runs-on: ubuntu-latest
-    needs: Publish
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/setup-go@v5
-        with:
-          go-version: '^1.21.5'
-      - uses: actions/checkout@v4
-      - uses: ko-build/setup-ko@v0.6
-      - name: Generate and upload release.yaml
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          tag=$(echo ${{ github.ref }} | cut -c11-)  # get tag name without tags/refs/ prefix.
-          ko resolve -t ${tag} -f config/ > release.yaml
-          gh release upload ${tag} release.yaml
+      - run: ko build -B --platform=linux/amd64,linux/arm64
