@@ -19,5 +19,6 @@ updates:
     groups:
       opentelemetry:
         patterns:
-          - "go.opentelemetry.io/*"
+          - "go.opentelemetry.io/otel"
+          - "go.opentelemetry.io/otel/trace"
           - "github.com/honeycombio/otel-config-go"
