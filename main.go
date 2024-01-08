@@ -2,6 +2,8 @@ package main
 
 import (
 	"fmt"
+	"net/http"
+	_ "net/http/pprof"
 	"net/url"
 	"os"
 	"os/signal"
@@ -39,9 +41,10 @@ type Options struct {
 		Sender   string `long:"sender" description:"type of sender" choice:"honeycomb" choice:"otel" choice:"print" choice:"dummy" default:"honeycomb"`
 		Protocol string `long:"protocol" description:"for otel only, protocol to use" choice:"grpc" choice:"protobuf" choice:"json" default:"grpc"`
 	} `group:"Output Options"`
-	LogLevel string `long:"loglevel" description:"level of logging" choice:"debug" choice:"info" choice:"warn" choice:"error" default:"warn"`
-	Seed     string `long:"seed" description:"string seed for random number generator (defaults to dataset name)"`
-	apihost  *url.URL
+	LogLevel  string `long:"loglevel" description:"level of logging" choice:"debug" choice:"info" choice:"warn" choice:"error" default:"warn"`
+	DebugPort int    `long:"debugport" description:"port to listen on for pprof" default:"-1"`
+	Seed      string `long:"seed" description:"string seed for random number generator (defaults to dataset name)"`
+	apihost   *url.URL
 }
 
 func (o *Options) DebugLevel() int {
@@ -141,6 +144,12 @@ func main() {
 		default:
 			os.Exit(1)
 		}
+	}
+
+	if opts.DebugPort > 0 {
+		go func() {
+			http.ListenAndServe(fmt.Sprintf("localhost:%d", opts.DebugPort), nil)
+		}()
 	}
 
 	// if we're not given a trace count or a runtime, send only 1 trace
