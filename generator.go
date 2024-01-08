@@ -2,9 +2,10 @@ package main
 
 import (
 	"context"
-	"math/rand"
 	"sync"
 	"time"
+
+	"pgregory.net/rand"
 )
 
 // A Generator generates traces and sends the individual spans to the spans channel. Its
@@ -71,7 +72,7 @@ func (s *TraceGenerator) generate_spans(ctx context.Context, level int, depth in
 		spansAtThisLevel = 1 + rand.Intn(nspans-depth)
 	}
 
-	spancounts := make([]int, 0)
+	spancounts := make([]int, 0, spansAtThisLevel)
 	if spansAtThisLevel == 1 {
 		// if there's only one span, give it all the counts
 		spancounts = append(spancounts, nspans)

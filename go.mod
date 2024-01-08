@@ -12,6 +12,7 @@ require (
 	github.com/jessevdk/go-flags v1.5.0
 	go.opentelemetry.io/otel v1.21.0
 	go.opentelemetry.io/otel/trace v1.21.0
+	pgregory.net/rand v1.0.2
 )
 
 require (
