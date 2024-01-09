@@ -64,7 +64,7 @@ type generationState struct {
 }
 
 // generate_spans generates a list of spans with the given depth and spancount
-// it is recursive and expects spans[0] to be the root span
+// it was recursive, but has been converted from tail recursion to a loop.
 // - level is the current depth of this span where 0 is the root span
 // - depth is the maximum depth (nesting level) of a trace -- how much deeper this trace will go
 // - nspans is the number of spans in a trace.
