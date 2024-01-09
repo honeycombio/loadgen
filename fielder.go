@@ -467,8 +467,9 @@ func (f *Fielder) GetFields(count int64, level int) map[string]any {
 }
 
 func (f *Fielder) AddFields(span trace.Span, count int64, level int) {
+	attrs := make([]attribute.KeyValue, 0, 1+len(f.fields))
 	if count != 0 {
-		span.SetAttributes(attribute.Int64("count", count))
+		attrs = append(attrs, attribute.Int64("count", count))
 	}
 	for key, val := range f.fields {
 		key, ok := f.atLevel(key, level)
@@ -477,17 +478,18 @@ func (f *Fielder) AddFields(span trace.Span, count int64, level int) {
 		}
 		switch v := val().(type) {
 		case int64:
-			span.SetAttributes(attribute.Int64(key, v))
+			attrs = append(attrs, attribute.Int64(key, v))
 		case uint64:
-			span.SetAttributes(attribute.Int64(key, int64(v)))
+			attrs = append(attrs, attribute.Int64(key, int64(v)))
 		case float64:
-			span.SetAttributes(attribute.Float64(key, v))
+			attrs = append(attrs, attribute.Float64(key, v))
 		case string:
-			span.SetAttributes(attribute.String(key, v))
+			attrs = append(attrs, attribute.String(key, v))
 		case bool:
-			span.SetAttributes(attribute.Bool(key, v))
+			attrs = append(attrs, attribute.Bool(key, v))
 		default:
 			panic(fmt.Sprintf("unknown type %T for %s -- implementation error in fielder.go", v, key))
 		}
 	}
+	span.SetAttributes(attrs...)
 }
