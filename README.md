@@ -86,7 +86,6 @@ In addition, every span will always have the following fields:
  - start_time
  - end_time
  - process_id (the process id of the loadgen process)
- - goroutine_id (the ID of the goroutine producing that particular trace)
 
 ## Key adjustable values:
 
