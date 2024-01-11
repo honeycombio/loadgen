@@ -159,12 +159,12 @@ func main() {
 
 	log := NewLogger(opts.DebugLevel())
 
-	fielder := func() *Fielder {
-		fielder, err := NewFielder(opts.Seed, args, opts.Format.Extra, opts.Format.Depth)
+	getFielderFn := func() *Fielder {
+		getFielder, err := NewFielder(opts.Seed, args, opts.Format.Extra, opts.Format.Depth)
 		if err != nil {
 			log.Fatal("unable to create fields as specified: %s\n", err)
 		}
-		return fielder
+		return getFielder
 	}
 
 	opts.apihost = parseHost(log, opts.Telemetry.Host, opts.Telemetry.Insecure)
@@ -220,7 +220,7 @@ func main() {
 	}()
 
 	// start the load generator to create spans and send them on the source chan
-	var generator Generator = NewTraceGenerator(sender, fielder, log, opts)
+	var generator Generator = NewTraceGenerator(sender, getFielderFn, log, opts)
 	wg.Add(1)
 	go generator.Generate(opts, wg, stop, counterChan)
 

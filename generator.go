@@ -26,29 +26,29 @@ const (
 )
 
 type TraceGenerator struct {
-	depth    int
-	nspans   int
-	duration time.Duration
-	fielder  func() *Fielder
-	chans    []chan struct{}
-	mut      sync.RWMutex
-	log      Logger
-	tracer   Sender
+	depth      int
+	nspans     int
+	duration   time.Duration
+	getFielder func() *Fielder
+	chans      []chan struct{}
+	mut        sync.RWMutex
+	log        Logger
+	tracer     Sender
 }
 
 // make sure it implements Generator
 var _ Generator = (*TraceGenerator)(nil)
 
-func NewTraceGenerator(tsender Sender, fielder func() *Fielder, log Logger, opts Options) *TraceGenerator {
+func NewTraceGenerator(tsender Sender, getFielder func() *Fielder, log Logger, opts Options) *TraceGenerator {
 	chans := make([]chan struct{}, 0)
 	return &TraceGenerator{
-		depth:    opts.Format.Depth,
-		nspans:   opts.Format.NSpans,
-		duration: opts.Format.TraceTime,
-		fielder:  fielder,
-		chans:    chans,
-		log:      log,
-		tracer:   tsender,
+		depth:      opts.Format.Depth,
+		nspans:     opts.Format.NSpans,
+		duration:   opts.Format.TraceTime,
+		getFielder: getFielder,
+		chans:      chans,
+		log:        log,
+		tracer:     tsender,
 	}
 }
 
@@ -127,7 +127,7 @@ func (s *TraceGenerator) generator(wg *sync.WaitGroup, counter chan int64) {
 	s.mut.Unlock()
 
 	ticker := time.NewTicker(duration)
-	fielder := s.fielder()
+	fielder := s.getFielder()
 	defer wg.Done()
 	for {
 		select {
