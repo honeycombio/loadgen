@@ -29,7 +29,7 @@ type TraceGenerator struct {
 	depth    int
 	nspans   int
 	duration time.Duration
-	fielder  *Fielder
+	fielder  func() *Fielder
 	chans    []chan struct{}
 	mut      sync.RWMutex
 	log      Logger
@@ -39,7 +39,7 @@ type TraceGenerator struct {
 // make sure it implements Generator
 var _ Generator = (*TraceGenerator)(nil)
 
-func NewTraceGenerator(tsender Sender, fielder *Fielder, log Logger, opts Options) *TraceGenerator {
+func NewTraceGenerator(tsender Sender, fielder func() *Fielder, log Logger, opts Options) *TraceGenerator {
 	chans := make([]chan struct{}, 0)
 	return &TraceGenerator{
 		depth:    opts.Format.Depth,
@@ -59,7 +59,7 @@ func NewTraceGenerator(tsender Sender, fielder *Fielder, log Logger, opts Option
 // - nspans is the number of spans in a trace.
 // If nspans is less than depth, the trace will be truncated at nspans.
 // If nspans is greater than depth, some of the children will have siblings.
-func (s *TraceGenerator) generate_spans(ctx context.Context, level int, depth int, nspans int, timeRemaining time.Duration) {
+func (s *TraceGenerator) generate_spans(ctx context.Context, fielder *Fielder, level int, depth int, nspans int, timeRemaining time.Duration) {
 	if depth == 0 || nspans == 0 {
 		return
 	}
@@ -95,21 +95,21 @@ func (s *TraceGenerator) generate_spans(ctx context.Context, level int, depth in
 		durationThisSpan := durationRemaining / time.Duration(spansAtThisLevel-i)
 		durationRemaining -= durationThisSpan
 		time.Sleep(durationThisSpan / 2)
-		childctx, span := s.tracer.CreateSpan(ctx, s.fielder.GetServiceName(depth), level, s.fielder)
-		s.generate_spans(childctx, level+1, depth-1, spancounts[i]-1, durationPerChild)
+		childctx, span := s.tracer.CreateSpan(ctx, fielder.GetServiceName(depth), level, fielder)
+		s.generate_spans(childctx, fielder, level+1, depth-1, spancounts[i]-1, durationPerChild)
 		time.Sleep(durationThisSpan / 2)
 		span.Send()
 	}
 }
 
-func (s *TraceGenerator) generate_root(count int64, depth int, nspans int, timeRemaining time.Duration) {
+func (s *TraceGenerator) generate_root(fielder *Fielder, count int64, depth int, nspans int, timeRemaining time.Duration) {
 	ctx := context.Background()
-	ctx, root := s.tracer.CreateTrace(ctx, s.fielder.GetServiceName(depth), s.fielder, count)
+	ctx, root := s.tracer.CreateTrace(ctx, fielder.GetServiceName(depth), fielder, count)
 	thisSpanDuration := time.Duration(rand.Intn(int(timeRemaining) / (nspans + 1)))
 	childDuration := (timeRemaining - thisSpanDuration)
 
 	time.Sleep(thisSpanDuration / 2)
-	s.generate_spans(ctx, 1, depth-1, nspans-1, childDuration)
+	s.generate_spans(ctx, fielder, 1, depth-1, nspans-1, childDuration)
 	time.Sleep(thisSpanDuration / 2)
 	root.Send()
 }
@@ -127,6 +127,7 @@ func (s *TraceGenerator) generator(wg *sync.WaitGroup, counter chan int64) {
 	s.mut.Unlock()
 
 	ticker := time.NewTicker(duration)
+	fielder := s.fielder()
 	defer wg.Done()
 	for {
 		select {
@@ -137,7 +138,7 @@ func (s *TraceGenerator) generator(wg *sync.WaitGroup, counter chan int64) {
 			// generate a trace if we haven't been stopped by the counter
 			select {
 			case count := <-counter:
-				s.generate_root(count, depth, nspans, duration)
+				s.generate_root(fielder, count, depth, nspans, duration)
 			default:
 				// do nothing, we're done, and the stop will be caught by the outer select
 			}

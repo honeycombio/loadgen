@@ -159,9 +159,12 @@ func main() {
 
 	log := NewLogger(opts.DebugLevel())
 
-	fielder, err := NewFielder(opts.Seed, args, opts.Format.Extra, opts.Format.Depth)
-	if err != nil {
-		log.Fatal("unable to create fields as specified: %s\n", err)
+	fielder := func() *Fielder {
+		fielder, err := NewFielder(opts.Seed, args, opts.Format.Extra, opts.Format.Depth)
+		if err != nil {
+			log.Fatal("unable to create fields as specified: %s\n", err)
+		}
+		return fielder
 	}
 
 	opts.apihost = parseHost(log, opts.Telemetry.Host, opts.Telemetry.Insecure)
