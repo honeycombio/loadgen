@@ -47,8 +47,8 @@ github.com/honeycombio/beeline-go v1.14.0 h1:m146oWmngzG6SGGezOCyoYzL3v3A0AVqRS9
 github.com/honeycombio/beeline-go v1.14.0/go.mod h1:RODJ4yaVJjNhQ5eUvi2ZnpY/C074lwD6JI9rYNZfhxg=
 github.com/honeycombio/libhoney-go v1.20.0 h1:PL54R0P9vxIyb28H3twbLb+DCqQlJdMQM55VZg1abKA=
 github.com/honeycombio/libhoney-go v1.20.0/go.mod h1:RIaurCpfg5NDWSEV8t3QLcda9dUAiVNyWeHRAaSpN90=
-github.com/honeycombio/opentelemetry-go/sdk v1.21.1-0.20240111002053-910f7cc40dd7 h1:4R+Xw/0pvVw/CcTm3/V1wa6WrvmDnHRn0gsGR0pFwPs=
-github.com/honeycombio/opentelemetry-go/sdk v1.21.1-0.20240111002053-910f7cc40dd7/go.mod h1:iiay1bUIMd8paXmlwOiNc8Gsw3++qfRCR7oCHgkf6V4=
+github.com/honeycombio/opentelemetry-go/sdk v1.21.1-hnyperf h1:tDbjhGO8Gu7L+hJPcSV0Y9gzFEDU8Gc43Bq4Om8cOlA=
+github.com/honeycombio/opentelemetry-go/sdk v1.21.1-hnyperf/go.mod h1:Nna6Yv7PWTdgJHVRD9hIYywQBRx7pbox6nwBnZIxl/E=
 github.com/honeycombio/otel-config-go v1.13.1 h1:JYERH81ChVB4vH3Jmo8ifAkeKhVRD85uaaLLpm4MzY0=
 github.com/honeycombio/otel-config-go v1.13.1/go.mod h1:5hRpKBVO2cMXBaonDmr6KHYB2N/Q5AD3hr7+PVJQOx0=
 github.com/jessevdk/go-flags v1.5.0 h1:1jKYvbxEjfUl0fmqTCOfonvskHHXMjBySTLW4y9LFvc=
