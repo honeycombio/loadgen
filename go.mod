@@ -62,4 +62,4 @@ require (
 	gopkg.in/alexcesaro/statsd.v2 v2.0.0 // indirect
 )
 
-replace go.opentelemetry.io/otel/sdk => github.com/honeycombio/opentelemetry-go/sdk v1.0.1-0.20240109225751-af0d2a683aa7
+replace go.opentelemetry.io/otel/sdk => github.com/honeycombio/opentelemetry-go/sdk v1.21.1-hnyperf
