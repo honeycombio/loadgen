@@ -121,8 +121,8 @@ func (r Rng) WordPair() string {
 	return r.Choice(adjectives) + "-" + r.Choice(nouns)
 }
 
-func (r Rng) BoolWithProb(p int) bool {
-	return r.Int(0, 100) < int64(p)
+func (r Rng) BoolWithProb(p float64) bool {
+	return r.Float(0, 100) < p
 }
 
 // getProcessID returns the process ID
@@ -201,10 +201,10 @@ func parseUserFields(rng Rng, userfields []string) (map[string]func() any, error
 				return nil, fmt.Errorf("invalid float in user field %s: %w", field, err)
 			}
 		case "b":
-			n := 50
+			n := 50.0
 			var err error
 			if p1 != "" {
-				n, err = strconv.Atoi(p1)
+				n, err = strconv.ParseFloat(p1, 64)
 				if err != nil || n < 0 || n > 100 {
 					return nil, fmt.Errorf("invalid bool option in %s", field)
 				}

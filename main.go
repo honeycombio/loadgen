@@ -121,7 +121,7 @@ func main() {
 		- /sq4 -- pronounceable words with cardinality 4 with quadratic distribution
 		- /ir100 -- int in a range of 0 to 100
 		- /fg50,30 -- float in a gaussian distribution with mean 50 and stddev 30
-		- /b -- boolean, true or false
+		- /b33.3 -- boolean, true or false -- probability of true is 33.3% (default 50%)
 		- /u -- https url-like, no query string, two path segments; default cardinality is 10/10 but can be changed like /u3,20
 		- /uq -- as /u above, but with query string containing a random key word with a completely random value
 		- /st -- an http status code by default reflecting 95% 200s, 4% 400s, 1% 500s. 400s and 500s can be changed like /st10,0.1.
