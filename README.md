@@ -2,6 +2,8 @@
 
 **A flexible, Honeycomb-aware Telemetry load generator for traces**
 
+[![OSS Lifecycle](https://img.shields.io/osslifecycle/honeycombio/loadgen)](https://github.com/honeycombio/home/blob/main/honeycomb-oss-lifecycle-and-practices.md)
+
 ## About
 
 `loadgen` generates telemetry loads for performance testing, load testing, and
