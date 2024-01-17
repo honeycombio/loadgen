@@ -19,13 +19,17 @@ jobs:
         uses: actions/checkout@v2
         with:
           fetch-depth: 0
+      - name: setup go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.21'
       - name: verify licenses
         id: verifyLicenses
         continue-on-error: true
         run: make verify-licenses
       # When the previous step fails, the workflow would normally stop. By adding this
       # condition you can continue the execution with the populated error message.
-      - if: ${{ always() && (steps.verifyLicenses.outcome == 'failure') }}
+      - if: ${{ steps.verifyLicenses.outcome == 'failure' }}
         name: "📝 Add PR comment about updating licenses"
         uses: marocchino/sticky-pull-request-comment@v2
         with:
@@ -49,6 +53,7 @@ jobs:
       - if: ${{ steps.verifyLicenses.outcome == 'success' }}
         name: "❌ Delete PR comment after licenses have been updated"
         uses: marocchino/sticky-pull-request-comment@v2
+        continue-on-error: true
         with:
           header: pr-licenses-not-updated
           delete: true
