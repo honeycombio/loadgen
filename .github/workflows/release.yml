@@ -15,7 +15,7 @@ jobs:
     steps:
       - uses: actions/setup-go@v5
         with:
-          go-version: '^1.21.5'
+          go-version: '^1.21.6'
       - uses: actions/checkout@v4
       - uses: ko-build/setup-ko@v0.6
-      - run: ko build -B --platform=linux/amd64,linux/arm64
+      - run: ko build -B --platform=linux/amd64,linux/arm64 -t latest,${{github.ref_name}}
