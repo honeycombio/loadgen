@@ -51,7 +51,7 @@ var nouns = []string{
 	"watch", "wheel", "whip", "whistle", "window", "wing", "wire", "worm",
 }
 
-var constpat = regexp.MustCompile(`^([a-zA-Z0-9_]+)=([^/].*)$`)
+var constpat = regexp.MustCompile(`^([a-zA-Z0-9_.]+)=([^/].*)$`)
 var genpat = regexp.MustCompile(`^((?:[0-9]+\.)?[a-zA-Z0-9_]+)=/([ibfsu][awxrgqt]?)([0-9.-]+)?(,[0-9.-]+)?$`)
 var keypat = regexp.MustCompile(`^([0-9]+)\.(.*$)`)
 
