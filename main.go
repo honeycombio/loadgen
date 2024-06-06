@@ -41,14 +41,16 @@ type Options struct {
 		Sender   string `long:"sender" description:"type of sender" choice:"honeycomb" choice:"otel" choice:"print" choice:"dummy" default:"honeycomb"`
 		Protocol string `long:"protocol" description:"for otel only, protocol to use" choice:"grpc" choice:"protobuf" choice:"json" default:"grpc"`
 	} `group:"Output Options"`
-	LogLevel  string `long:"loglevel" description:"level of logging" choice:"debug" choice:"info" choice:"warn" choice:"error" default:"warn"`
-	DebugPort int    `long:"debugport" description:"port to listen on for pprof" default:"-1"`
-	Seed      string `long:"seed" description:"string seed for random number generator (defaults to dataset name)"`
-	apihost   *url.URL
+	Global struct {
+		LogLevel  string `long:"loglevel" description:"level of logging" choice:"debug" choice:"info" choice:"warn" choice:"error" default:"warn"`
+		DebugPort int    `long:"debugport" description:"port to listen on for pprof" default:"-1"`
+		Seed      string `long:"seed" description:"string seed for random number generator (defaults to dataset name)"`
+	} `group:"Global Options"`
+	apihost *url.URL
 }
 
 func (o *Options) DebugLevel() int {
-	switch o.LogLevel {
+	switch o.Global.LogLevel {
 	case "debug":
 		return 3
 	case "info":
@@ -146,9 +148,9 @@ func main() {
 		}
 	}
 
-	if opts.DebugPort > 0 {
+	if opts.Global.DebugPort > 0 {
 		go func() {
-			http.ListenAndServe(fmt.Sprintf("localhost:%d", opts.DebugPort), nil)
+			http.ListenAndServe(fmt.Sprintf("localhost:%d", opts.Global.DebugPort), nil)
 		}()
 	}
 
@@ -160,7 +162,7 @@ func main() {
 	log := NewLogger(opts.DebugLevel())
 
 	getFielderFn := func() *Fielder {
-		getFielder, err := NewFielder(opts.Seed, args, opts.Format.Extra, opts.Format.Depth)
+		getFielder, err := NewFielder(opts.Global.Seed, args, opts.Format.Extra, opts.Format.Depth)
 		if err != nil {
 			log.Fatal("unable to create fields as specified: %s\n", err)
 		}
