@@ -109,7 +109,7 @@ To mix different kinds of traces, or send traces to multiple datasets, use multi
 
 A YAML configuration file can be used by specifying `--config=filename`.
 The format of the YAML file reflects the configuration parameters.
-See the file [sample_config.yaml](https://github.com/honeycombio/loadgen/sample_config.yaml) for an example.
+See the file [sample_config.yaml](https://github.com/honeycombio/loadgen/blob/main/sample_config.yaml) for an example.
 
 For an easy way to convert an existing command line to a YAML file, use `--writecfg=outputfile`.
 This will write the YAML equivalent of the complete configuration (except for the API key) to the specified location.
