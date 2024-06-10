@@ -51,9 +51,14 @@ var nouns = []string{
 	"watch", "wheel", "whip", "whistle", "window", "wing", "wire", "worm",
 }
 
-var constpat = regexp.MustCompile(`^([a-zA-Z0-9_.]+)=([^/].*)$`)
-var genpat = regexp.MustCompile(`^((?:[0-9]+\.)?[a-zA-Z0-9_]+)=/([ibfsu][awxrgqt]?)([0-9.-]+)?(,[0-9.-]+)?$`)
-var keypat = regexp.MustCompile(`^([0-9]+)\.(.*$)`)
+// constfield is a field that *doesn't* start with slash
+var constfield = regexp.MustCompile(`^([^/].*)$`)
+
+// genfield is used to parse generator fields by matching valid commands and numeric arguments
+var genfield = regexp.MustCompile(`^/([ibfsu][awxrgqt]?)([0-9.-]+)?(,[0-9.-]+)?$`)
+
+// keysplitter separates fields that look like number.name (ex: 1.myfield)
+var keysplitter = regexp.MustCompile(`^([0-9]+)\.(.*$)`)
 
 type Rng struct {
 	rng *rand.Rand
@@ -166,39 +171,35 @@ func getWordList(rng Rng, cardinality int, source []string) []string {
 
 // parseUserFields expects a list of fields in the form of name=constant or name=/gen.
 // See README.md for more information.
-func parseUserFields(rng Rng, userfields []string) (map[string]func() any, error) {
+func parseUserFields(rng Rng, userfields map[string]string) (map[string]func() any, error) {
 	// groups                                        1                   2	         3         4
 	fields := make(map[string]func() any)
-	for _, field := range userfields {
+	for name, value := range userfields {
 		// see if it's a constant
-		matches := constpat.FindStringSubmatch(field)
-		if matches != nil {
-			name := matches[1]
-			value := matches[2]
+		if constfield.MatchString(value) {
 			fields[name] = getConst(value)
 			continue
 		}
 
 		// see if it's a generator
-		matches = genpat.FindStringSubmatch(field)
+		matches := genfield.FindStringSubmatch(value)
 		if matches == nil {
-			return nil, fmt.Errorf("unparseable user field %s", field)
+			return nil, fmt.Errorf("unparseable user field %s=%s", name, value)
 		}
 		var err error
-		name := matches[1]
-		gentype := matches[2]
-		p1 := matches[3]
-		p2 := matches[4]
+		gentype := matches[1]
+		p1 := matches[2]
+		p2 := matches[3]
 		switch gentype {
 		case "i", "ir", "ig":
 			fields[name], err = getIntGen(rng, gentype, p1, p2)
 			if err != nil {
-				return nil, fmt.Errorf("invalid int in user field %s: %w", field, err)
+				return nil, fmt.Errorf("invalid int in user field %s=%s: %w", name, value, err)
 			}
 		case "f", "fr", "fg":
 			fields[name], err = getFloatGen(rng, gentype, p1, p2)
 			if err != nil {
-				return nil, fmt.Errorf("invalid float in user field %s: %w", field, err)
+				return nil, fmt.Errorf("invalid float in user field %s=%s: %w", name, value, err)
 			}
 		case "b":
 			n := 50.0
@@ -206,7 +207,7 @@ func parseUserFields(rng Rng, userfields []string) (map[string]func() any, error
 			if p1 != "" {
 				n, err = strconv.ParseFloat(p1, 64)
 				if err != nil || n < 0 || n > 100 {
-					return nil, fmt.Errorf("invalid bool option in %s", field)
+					return nil, fmt.Errorf("invalid bool option in %s=%s", name, value)
 				}
 			}
 			fields[name] = func() any { return rng.BoolWithProb(n) }
@@ -215,7 +216,7 @@ func parseUserFields(rng Rng, userfields []string) (map[string]func() any, error
 			if p1 != "" {
 				n, err = strconv.Atoi(p1)
 				if err != nil {
-					return nil, fmt.Errorf("invalid string option in %s", field)
+					return nil, fmt.Errorf("invalid string option in %s=%s", name, value)
 				}
 			}
 			switch gentype {
@@ -236,7 +237,7 @@ func parseUserFields(rng Rng, userfields []string) (map[string]func() any, error
 			// Generate a URL-like string with a random path and possibly a query string
 			fields[name], err = getURLGen(rng, gentype, p1, p2)
 			if err != nil {
-				return nil, fmt.Errorf("invalid float in user field %s: %w", field, err)
+				return nil, fmt.Errorf("invalid float in user field %s=%s: %w", name, value, err)
 			}
 		case "st":
 			// Generate a semi-plausible mix of status codes; percentage of 400s and 500s can be controlled by the extra args
@@ -246,13 +247,13 @@ func parseUserFields(rng Rng, userfields []string) (map[string]func() any, error
 			if p1 != "" {
 				fours, err = strconv.ParseFloat(p1, 64)
 				if err != nil {
-					return nil, fmt.Errorf("invalid float in user field %s: %w", field, err)
+					return nil, fmt.Errorf("invalid float in user field %s=%s: %w", name, value, err)
 				}
 			}
 			if p2 != "" {
 				fives, err = strconv.ParseFloat(p2[1:], 64)
 				if err != nil {
-					return nil, fmt.Errorf("invalid float in user field %s: %w", field, err)
+					return nil, fmt.Errorf("invalid float in user field %s=%s: %w", name, value, err)
 				}
 			}
 			twos = 100 - fours - fives
@@ -268,7 +269,7 @@ func parseUserFields(rng Rng, userfields []string) (map[string]func() any, error
 			}
 
 		default:
-			return nil, fmt.Errorf("invalid generator type %s in field %s", gentype, field)
+			return nil, fmt.Errorf("invalid generator type %s in field %s=%s", gentype, name, value)
 		}
 	}
 	return fields, nil
@@ -411,7 +412,7 @@ type Fielder struct {
 // combining an adjective and a noun and are consistent for a given fielder.
 // The field values are randomly generated.
 // Fielder also includes the process_id.
-func NewFielder(seed string, userFields []string, nextras, nservices int) (*Fielder, error) {
+func NewFielder(seed string, userFields map[string]string, nextras, nservices int) (*Fielder, error) {
 	rng := NewRng(seed)
 	gens := rng.getValueGenerators()
 	fields, err := parseUserFields(rng, userFields)
@@ -440,7 +441,7 @@ func (f *Fielder) GetServiceName(n int) string {
 // indicate that the field should be included at a specific
 // level in the trace, where 0 is the root.
 func (f *Fielder) atLevel(name string, level int) (string, bool) {
-	matches := keypat.FindStringSubmatch(name)
+	matches := keysplitter.FindStringSubmatch(name)
 	if len(matches) == 0 {
 		return name, true
 	}

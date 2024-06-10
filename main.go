@@ -2,17 +2,20 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"net/http"
 	_ "net/http/pprof"
 	"net/url"
 	"os"
 	"os/signal"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
 
 	"github.com/goware/urlx"
 	"github.com/jessevdk/go-flags"
+	"gopkg.in/yaml.v3"
 )
 
 var ResourceLibrary = "loadgen"
@@ -23,7 +26,7 @@ type Options struct {
 		Host     string `long:"host" description:"the url of the host to receive the telemetry (or honeycomb, dogfood, local)" default:"honeycomb"`
 		Insecure bool   `long:"insecure" description:"use this for insecure http (not https) connections"`
 		Dataset  string `long:"dataset" description:"sends all traces to the given dataset" env:"HONEYCOMB_DATASET" default:"loadgen"`
-		APIKey   string `long:"apikey" description:"the honeycomb API key" env:"HONEYCOMB_API_KEY"`
+		APIKey   string `long:"apikey" description:"the honeycomb API key(*)" env:"HONEYCOMB_API_KEY" yaml:"-"`
 	} `group:"Telemetry Options"`
 	Format struct {
 		Depth     int           `long:"depth" description:"the nesting depth of each trace" default:"3"`
@@ -43,10 +46,24 @@ type Options struct {
 	} `group:"Output Options"`
 	Global struct {
 		LogLevel  string `long:"loglevel" description:"level of logging" choice:"debug" choice:"info" choice:"warn" choice:"error" default:"warn"`
-		DebugPort int    `long:"debugport" description:"port to listen on for pprof" default:"-1"`
-		Seed      string `long:"seed" description:"string seed for random number generator (defaults to dataset name)"`
+		DebugPort int    `long:"debugport" description:"port to listen on for pprof(*)" default:"-1" yaml:"-"`
+		Seed      string `long:"seed" description:"string seed for random number generator (defaults to dataset name)" yaml:",omitempty"`
+		Config    string `long:"config" description:"name of config file to load(*)" default:"" yaml:"-"`
+		WriteCfg  string `long:"writecfg" description:"write effective YAML config to the specified output file and quit(*)" default:"" yaml:"-"`
 	} `group:"Global Options"`
+	Fields  map[string]string `yaml:"fields,omitempty"`
 	apihost *url.URL
+}
+
+func newOptions() *Options {
+	return &Options{Fields: make(map[string]string)}
+}
+
+func (o *Options) CopyStarredFieldsFrom(other *Options) {
+	o.Telemetry.APIKey = other.Telemetry.APIKey
+	o.Global.DebugPort = other.Global.DebugPort
+	o.Global.Config = other.Global.Config
+	o.Global.WriteCfg = other.Global.WriteCfg
 }
 
 func (o *Options) DebugLevel() int {
@@ -94,10 +111,38 @@ func parseHost(log Logger, host string, insecure bool) *url.URL {
 	return u
 }
 
-func main() {
-	var opts Options
+func ReadConfig(opts *Options, filename string) error {
+	f, err := os.Open(filename)
+	if err != nil {
+		return err
+	}
+	dec := yaml.NewDecoder(f)
+	err = dec.Decode(opts)
+	if err != nil {
+		return err
+	}
+	log.Printf("read config from %s\n", filename)
+	return nil
+}
 
-	parser := flags.NewParser(&opts, flags.Default)
+func WriteConfig(opts *Options, filename string) error {
+	f, err := os.Create(filename)
+	if err != nil {
+		return err
+	}
+	enc := yaml.NewEncoder(f)
+	err = enc.Encode(opts)
+	if err != nil {
+		return err
+	}
+	log.Printf("wrote config to %s\n", filename)
+	return nil
+}
+
+func main() {
+	cmdopts := newOptions()
+
+	parser := flags.NewParser(cmdopts, flags.Default)
 	parser.Usage = `[OPTIONS] [FIELD=VALUE]...
 
 	loadgen generates telemetry loads for performance testing, load testing, and
@@ -111,9 +156,9 @@ func main() {
 	It can generate OTLP or Honeycomb-formatted traces, and send them to Honeycomb
 	or (for OTLP) to any OTel agent.
 
-	You can specify fields to be added to each span by specifying them on the command
-	line. Each field should be specified as FIELD=VALUE. The value can be a constant
-	(and will be sent as the appropriate type), or a generator function starting with /.
+	You can specify fields to be added to each span. Each field should be specified as
+	FIELD=VALUE. The value can be a constant (and will be sent as the appropriate type),
+	or a generator function starting with /.
 	Allowed generators are /i, /ir, /ig, /f, /fr, /fg, /s, /sx, /sw, /b, optionally
 	followed by a single number or a comma-separated pair of numbers.
 	Example generators:
@@ -132,9 +177,17 @@ func main() {
 	a number and a dot (e.g. 1.foo=bar) the field will only be injected into spans at
 	that level of nesting (where 0 is the root span).
 
+	Options can be set in a config file, or on the command line; to specify them in the
+	config file, specify it on the command line with "--config=FILENAME". The config file
+	format is YAML; see "example.yml" for an example.
+
+	If a config file is used, it must be used for all options, except for the ones marked with (*).
+	These fields cannot be set in the config file.
+
 	For full details, see https://github.com/honeycombio/loadgen/
 	`
 
+	// read the command line and envvars into cmdargs
 	args, err := parser.Parse()
 	if err != nil {
 		switch flagsErr := err.(type) {
@@ -142,10 +195,35 @@ func main() {
 			if flagsErr.Type == flags.ErrHelp {
 				os.Exit(0)
 			}
-			os.Exit(1)
-		default:
-			os.Exit(1)
 		}
+		log.Fatalf("error reading command line: %v", err)
+	}
+
+	opts := newOptions()
+	if cmdopts.Global.Config != "" {
+		if err := ReadConfig(opts, cmdopts.Global.Config); err != nil {
+			log.Fatalf("err %v -- unable to read config file %s", err, cmdopts.Global.Config)
+		}
+		opts.CopyStarredFieldsFrom(cmdopts)
+	} else {
+		opts = cmdopts // we don't have to read from a file
+	}
+
+	// split the args into opts.Fields, potentially overwriting
+	for _, arg := range args {
+		s := strings.SplitN(arg, "=", 2)
+		if len(s) < 2 {
+			log.Fatalf("field `%s` missing required '='", s)
+		}
+		opts.Fields[s[0]] = s[1]
+	}
+
+	if opts.Global.WriteCfg != "" {
+		err := WriteConfig(opts, opts.Global.WriteCfg)
+		if err != nil {
+			log.Fatalf("unable to write config: %s\n", err)
+		}
+		os.Exit(0)
 	}
 
 	if opts.Global.DebugPort > 0 {
@@ -162,7 +240,7 @@ func main() {
 	log := NewLogger(opts.DebugLevel())
 
 	getFielderFn := func() *Fielder {
-		getFielder, err := NewFielder(opts.Global.Seed, args, opts.Format.Extra, opts.Format.Depth)
+		getFielder, err := NewFielder(opts.Global.Seed, opts.Fields, opts.Format.Extra, opts.Format.Depth)
 		if err != nil {
 			log.Fatal("unable to create fields as specified: %s\n", err)
 		}

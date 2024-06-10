@@ -10,8 +10,10 @@ require (
 	github.com/honeycombio/beeline-go v1.15.0
 	github.com/honeycombio/otel-config-go v1.14.0
 	github.com/jessevdk/go-flags v1.5.0
+	github.com/jonboulle/clockwork v0.4.0
 	go.opentelemetry.io/otel v1.24.0
 	go.opentelemetry.io/otel/trace v1.24.0
+	gopkg.in/yaml.v3 v3.0.1
 	pgregory.net/rand v1.0.2
 )
 

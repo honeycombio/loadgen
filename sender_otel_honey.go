@@ -45,7 +45,7 @@ func (l OtelLogger) Fatalf(format string, args ...interface{}) {
 	l.Logger.Fatal(format, args...)
 }
 
-func NewSenderOTel(log Logger, opts Options) *SenderOTel {
+func NewSenderOTel(log Logger, opts *Options) *SenderOTel {
 	var protocol otelconfig.Protocol
 	switch opts.Output.Protocol {
 	case "grpc":

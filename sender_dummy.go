@@ -52,7 +52,7 @@ type SenderDummy struct {
 // make sure it implements Sender
 var _ Sender = (*SenderDummy)(nil)
 
-func NewSenderDummy(log Logger, opts Options) Sender {
+func NewSenderDummy(log Logger, opts *Options) Sender {
 	return &SenderDummy{log: log}
 }
 
