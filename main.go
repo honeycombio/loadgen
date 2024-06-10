@@ -24,20 +24,20 @@ var ResourceVersion = "dev"
 type Options struct {
 	Telemetry struct {
 		Host     string `long:"host" description:"the url of the host to receive the telemetry (or honeycomb, dogfood, local)" default:"honeycomb"`
-		Insecure bool   `long:"insecure" description:"use this for insecure http (not https) connections"`
+		Insecure bool   `long:"insecure" description:"use this for insecure http (not https) connections" yaml:",omitempty"`
 		Dataset  string `long:"dataset" description:"sends all traces to the given dataset" env:"HONEYCOMB_DATASET" default:"loadgen"`
 		APIKey   string `long:"apikey" description:"the honeycomb API key(*)" env:"HONEYCOMB_API_KEY" yaml:"-"`
 	} `group:"Telemetry Options"`
 	Format struct {
 		Depth     int           `long:"depth" description:"the nesting depth of each trace" default:"3"`
 		NSpans    int           `long:"nspans" description:"the total number of spans in a trace" default:"3"`
-		Extra     int           `long:"extra" description:"the number of random fields in a span beyond the standard ones" default:"0"`
+		Extra     int           `long:"extra" description:"the number of random fields in a span beyond the standard ones" default:"0" yaml:",omitempty"`
 		TraceTime time.Duration `long:"tracetime" description:"the duration of a trace" default:"1s"`
 	} `group:"Trace Format Options"`
 	Quantity struct {
 		TPS        int           `long:"tps" description:"the maximum number of traces to generate per second" default:"1"`
-		TraceCount int64         `long:"tracecount" description:"the maximum number of traces to generate (0 means no limit, but if runtime is not specified defaults to 1)" default:"0"`
-		RunTime    time.Duration `long:"runtime" description:"the maximum time to spend generating traces at max TPS (0 means no limit)" default:"0s"`
+		TraceCount int64         `long:"tracecount" description:"the maximum number of traces to generate (0 means no limit, but if runtime is not specified defaults to 1)" default:"0" yaml:",omitempty"`
+		RunTime    time.Duration `long:"runtime" description:"the maximum time to spend generating traces at max TPS (0 means no limit)" default:"0s" yaml:",omitempty"`
 		RampTime   time.Duration `long:"ramptime" description:"duration to spend ramping up or down to the desired TPS" default:"1s"`
 	} `group:"Quantity Options"`
 	Output struct {
@@ -177,14 +177,16 @@ func main() {
 	a number and a dot (e.g. 1.foo=bar) the field will only be injected into spans at
 	that level of nesting (where 0 is the root span).
 
+	Fields can also be specified in the config file as key/value pairs under the "fields" key.
+
 	Options can be set in a config file, or on the command line; to specify them in the
 	config file, specify it on the command line with "--config=FILENAME". The config file
 	format is YAML; see "example.yml" for an example.
 
-	If a config file is used, it must be used for all options, except for the ones marked with (*).
-	These fields cannot be set in the config file.
+	Note: If a config file is used, it MUST be used for all options, except for the ones
+	marked in the help text with (*) -- these fields CANNOT be set in the config file.
 
-	For full details, see https://github.com/honeycombio/loadgen/
+	For more detail, see https://github.com/honeycombio/loadgen/
 	`
 
 	// read the command line and envvars into cmdargs
