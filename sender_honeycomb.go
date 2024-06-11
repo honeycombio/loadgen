@@ -11,7 +11,7 @@ type SenderHoneycomb struct{}
 // make sure it implements Sender
 var _ Sender = (*SenderHoneycomb)(nil)
 
-func NewSenderHoneycomb(opts Options) *SenderHoneycomb {
+func NewSenderHoneycomb(opts *Options) *SenderHoneycomb {
 	beeline.Init(beeline.Config{
 		WriteKey:    opts.Telemetry.APIKey,
 		APIHost:     opts.apihost.String(),

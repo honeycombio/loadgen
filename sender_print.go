@@ -56,7 +56,7 @@ type SenderPrint struct {
 	log        Logger
 }
 
-func NewSenderPrint(log Logger, opts Options) Sender {
+func NewSenderPrint(log Logger, opts *Options) Sender {
 	return &SenderPrint{
 		log: log,
 	}

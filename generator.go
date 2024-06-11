@@ -13,7 +13,7 @@ import (
 // taking opts.Duration to do so. Its TPS method returns the number of traces
 // per second it is currently generating.
 type Generator interface {
-	Generate(opts Options, wg *sync.WaitGroup, stop chan struct{}, counter chan int64)
+	Generate(opts *Options, wg *sync.WaitGroup, stop chan struct{}, counter chan int64)
 	TPS() float64
 }
 
@@ -39,7 +39,7 @@ type TraceGenerator struct {
 // make sure it implements Generator
 var _ Generator = (*TraceGenerator)(nil)
 
-func NewTraceGenerator(tsender Sender, getFielder func() *Fielder, log Logger, opts Options) *TraceGenerator {
+func NewTraceGenerator(tsender Sender, getFielder func() *Fielder, log Logger, opts *Options) *TraceGenerator {
 	chans := make([]chan struct{}, 0)
 	return &TraceGenerator{
 		depth:      opts.Format.Depth,
@@ -146,7 +146,7 @@ func (s *TraceGenerator) generator(wg *sync.WaitGroup, counter chan int64) {
 	}
 }
 
-func (s *TraceGenerator) Generate(opts Options, wg *sync.WaitGroup, stop chan struct{}, counter chan int64) {
+func (s *TraceGenerator) Generate(opts *Options, wg *sync.WaitGroup, stop chan struct{}, counter chan int64) {
 	defer wg.Done()
 	ngenerators := float64(opts.Quantity.TPS) / s.TPS()
 	uSgeneratorInterval := float64(opts.Quantity.RampTime.Microseconds()) / ngenerators

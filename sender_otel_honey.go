@@ -45,7 +45,7 @@ func (l OtelLogger) Fatalf(format string, args ...interface{}) {
 	l.Logger.Fatal(format, args...)
 }
 
-func NewSenderOTel(log Logger, opts Options) *SenderOTel {
+func NewSenderOTel(log Logger, opts *Options) *SenderOTel {
 	var protocol otelconfig.Protocol
 	switch opts.Output.Protocol {
 	case "grpc":
@@ -64,7 +64,7 @@ func NewSenderOTel(log Logger, opts Options) *SenderOTel {
 		otelconfig.WithTracesExporterEndpoint(otelTracesFromURL(opts.apihost)),
 		otelconfig.WithTracesExporterInsecure(opts.Telemetry.Insecure),
 		otelconfig.WithMetricsEnabled(false),
-		otelconfig.WithLogLevel(opts.LogLevel),
+		otelconfig.WithLogLevel(opts.Global.LogLevel),
 		otelconfig.WithLogger(OtelLogger{log}),
 		otelconfig.WithHeaders(map[string]string{
 			"x-honeycomb-team": opts.Telemetry.APIKey,

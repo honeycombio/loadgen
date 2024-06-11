@@ -105,6 +105,18 @@ Ramp up and down are handled only by increasing or decreasing the number of goro
 
 To mix different kinds of traces, or send traces to multiple datasets, use multiple loadgen processes.
 
+## Configuration File
+
+A YAML configuration file can be used by specifying `--config=filename`.
+The format of the YAML file reflects the configuration parameters.
+See the file [sample_config.yaml](https://github.com/honeycombio/loadgen/blob/main/sample_config.yaml) for an example.
+
+For an easy way to convert an existing command line to a YAML file, use `--writecfg=outputfile`.
+This will write the YAML equivalent of the complete configuration (except for the API key) to the specified location.
+
+Fields, which are specified on the command line as `key=value` (without any `-` characters) can be specified in YAML
+by adding key-value pairs under the `fields` key.
+
 ## Generators
 
 After the list of options, loadgen permits a list of fields in the form of name=constant or name=/gen.

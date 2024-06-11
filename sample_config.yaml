@@ -1,0 +1,24 @@
+# This is a sample YAML configuration for sending data to
+# a production Honeycomb dataset using OTel.
+# Note that you must specify HONEYCOMB_API_KEY in your environment
+# or --apikey on the command line to authenticate with Honeycomb.
+telemetry:
+    dataset: my-dataset
+format:
+    depth: 5
+    nspans: 100
+    tracetime: 10s
+quantity:
+    tps: 1
+    tracecount: 2
+    ramptime: 1s
+output:
+    sender: honeycomb
+    protocol: grpc
+global:
+    loglevel: warn
+fields:
+    # simulate URLs for 10 services, each of which has 10 endpoints
+	http.url: /u10,10
+    # generate status codes where 10% are 400s and .1% are 500s
+	http.status: /st10,0.1
