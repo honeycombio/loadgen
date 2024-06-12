@@ -25,7 +25,7 @@ You should have a recent version of Go installed.
 
 Install:
 ```bash
-go install github.com/honeycombio/loadgen
+go install github.com/honeycombio/loadgen@latest
 ```
 
 Get Usage information:
