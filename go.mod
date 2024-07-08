@@ -9,7 +9,7 @@ require (
 	github.com/goware/urlx v0.3.2
 	github.com/honeycombio/beeline-go v1.16.0
 	github.com/honeycombio/otel-config-go v1.16.0
-	github.com/jessevdk/go-flags v1.5.0
+	github.com/jessevdk/go-flags v1.6.1
 	go.opentelemetry.io/otel v1.27.0
 	go.opentelemetry.io/otel/trace v1.27.0
 	gopkg.in/yaml.v3 v3.0.1
