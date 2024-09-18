@@ -143,6 +143,7 @@ more than one.
 | sw | pronounceable words, rectangular distribution | cardinality (16)||
 | sq | pronounceable words, quadratic distribution | cardinality (16) ||
 | sx | hexadecimal string | length in chars (16)||
+| k  | key fields used for testing intermittent key cardinality | cardinality (50) | period (60) |
 | u | url-like (2 parts) | cardinality of 1st part (3) | cardinality of 2nd part (10) |
 | uq | url with random query | cardinality of 1st part (3) | cardinality of 2nd part (10) |
 | st | status code | percentage of 400s | percentage of 500s |
@@ -161,6 +162,7 @@ where `0` means the root span.
 	* 1.name=/sq9 -- name is words with cardinality 9, only on spans that are direct children of the root span
 	* url=/u10,10 -- simulate URLs for 10 services, each of which has 10 endpoints
 	* status=/st10,0.1 -- generate status codes where 10% are 400s and .1% are 500s
+	* samplekey=/k50,60 -- generate sample keys with cardinality 50 but not all keys will occur before 60s
 
 ## Motivation
 

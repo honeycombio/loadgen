@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/dgryski/go-wyhash"
 	"go.opentelemetry.io/otel/attribute"
@@ -55,7 +56,8 @@ var nouns = []string{
 var constfield = regexp.MustCompile(`^([^/].*)$`)
 
 // genfield is used to parse generator fields by matching valid commands and numeric arguments
-var genfield = regexp.MustCompile(`^/([ibfsu][awxrgqt]?)([0-9.-]+)?(,[0-9.-]+)?$`)
+// the second parameter, if it exists, includes the comma
+var genfield = regexp.MustCompile(`^/([ibfsuk][awxrgqt]?)([0-9.-]+)?(,[0-9.-]+)?$`)
 
 // keysplitter separates fields that look like number.name (ex: 1.myfield)
 var keysplitter = regexp.MustCompile(`^([0-9]+)\.(.*$)`)
@@ -64,8 +66,8 @@ type Rng struct {
 	rng *rand.Rand
 }
 
-func NewRng(s string) Rng {
-	return Rng{rand.New(rand.NewSource(int64(wyhash.Hash([]byte(s), 2467825690))))}
+func NewRng(seed string) Rng {
+	return Rng{rand.New(rand.NewSource(int64(wyhash.Hash([]byte(seed), 2467825690))))}
 }
 
 func (r Rng) Intn(n int) int64 {
@@ -74,6 +76,9 @@ func (r Rng) Intn(n int) int64 {
 
 // Chooses a random element from a slice of strings.
 func (r Rng) Choice(a []string) string {
+	if len(a) == 0 {
+		return ""
+	}
 	return a[r.Intn(len(a))]
 }
 
@@ -169,6 +174,76 @@ func getWordList(rng Rng, cardinality int, source []string) []string {
 	return words
 }
 
+type EligibilityPeriod struct {
+	word  string
+	start time.Duration
+	end   time.Duration
+}
+
+type PeriodicEligibility struct {
+	rng     Rng
+	periods []EligibilityPeriod
+	period  time.Duration
+}
+
+// generates a list of eligibility periods for a set of words
+// each word is eligible for some period of time that is proportional to its position in the list
+// this is so that all the words are not available at the same time, but eventually all of them are
+func newPeriodicEligibility(rng Rng, words []string, period time.Duration) *PeriodicEligibility {
+	cardinality := len(words)
+	periods := make([]EligibilityPeriod, cardinality)
+	for i := 0; i < cardinality; i++ {
+		// calculate a period length that is proportional to the number of remaining words
+		periodLength := time.Duration(float64(period) * float64(cardinality-i) / float64(cardinality))
+		// startTime is a random value that ensures it will end before the next period starts
+		startTime := (period - periodLength) * time.Duration(rng.Float(0, 1))
+		periods[i] = EligibilityPeriod{
+			word:  words[i],
+			start: startTime,
+			end:   startTime + periodLength,
+		}
+	}
+	return &PeriodicEligibility{
+		rng:     rng,
+		periods: periods,
+		period:  period,
+	}
+}
+
+// gets one word from the list of eligible words based on the time since the start of the period
+// This is, on average, slower than the random selection, but the random one can sometimes
+// be very slow, so we use this as a fallback if we try randomly a few times and fail.
+func (pe *PeriodicEligibility) getEligibleWordFallback(durationSinceStart time.Duration) string {
+	tInPeriod := durationSinceStart % pe.period
+	eligibleIndexes := make([]int, 0, 20)
+	for i, period := range pe.periods {
+		if period.start <= tInPeriod && tInPeriod < period.end {
+			eligibleIndexes = append(eligibleIndexes, i)
+		}
+	}
+
+	if len(eligibleIndexes) == 0 {
+		// shouldn't happen, but if it does, just pick the first word
+		return pe.periods[0].word
+	}
+	ix := eligibleIndexes[pe.rng.Intn(len(eligibleIndexes))]
+	return pe.periods[ix].word
+}
+
+func (pe *PeriodicEligibility) getEligibleWord(durationSinceStart time.Duration) string {
+	tInPeriod := durationSinceStart % pe.period
+	// try 10 times to find an eligible word
+	for i := 0; i < 5; i++ {
+		ix := pe.rng.Intn(len(pe.periods))
+		period := pe.periods[ix]
+		if period.start <= tInPeriod && tInPeriod < period.end {
+			return period.word
+		}
+	}
+	// use the fallback
+	return pe.getEligibleWordFallback(durationSinceStart)
+}
+
 // parseUserFields expects a list of fields in the form of name=constant or name=/gen.
 // See README.md for more information.
 func parseUserFields(rng Rng, userfields map[string]string) (map[string]func() any, error) {
@@ -232,6 +307,11 @@ func parseUserFields(rng Rng, userfields map[string]string) (map[string]func() a
 				fields[name] = func() any { return rng.HexString(n) }
 			default:
 				fields[name] = func() any { return rng.String(n) }
+			}
+		case "k":
+			fields[name], err = getKeyGen(rng, p1, p2)
+			if err != nil {
+				return nil, fmt.Errorf("invalid key in key field %s=%s: %w", name, value, err)
 			}
 		case "u", "uq":
 			// Generate a URL-like string with a random path and possibly a query string
@@ -397,6 +477,33 @@ func getURLGen(rng Rng, gentype, p1, p2 string) (func() any, error) {
 			return "https://example.com/" + path1() + "/" + path2()
 		}, nil
 	}
+}
+
+func getKeyGen(rng Rng, p1, p2 string) (func() any, error) {
+	var cardinality, period int
+	var err error
+	if p1 == "" {
+		cardinality = 50
+	} else {
+		cardinality, err = strconv.Atoi(p1)
+		if err != nil {
+			return nil, fmt.Errorf("%s is not an int", p1)
+		}
+		if cardinality > len(nouns) {
+			return nil, fmt.Errorf("cardinality %d cannot be more than %d", cardinality, len(nouns))
+		}
+	}
+	if p2 == "" || p2 == "," {
+		period = 60
+	} else {
+		period, err = strconv.Atoi(p2[1:])
+		if err != nil {
+			return nil, fmt.Errorf("%s is not an int", p2[:1])
+		}
+	}
+	ep := newPeriodicEligibility(rng, nouns[:cardinality], time.Duration(period)*time.Second)
+	startTime := time.Now()
+	return func() any { return ep.getEligibleWord(time.Since(startTime)) }, nil
 }
 
 type Fielder struct {
