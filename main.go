@@ -159,7 +159,7 @@ func main() {
 	You can specify fields to be added to each span. Each field should be specified as
 	FIELD=VALUE. The value can be a constant (and will be sent as the appropriate type),
 	or a generator function starting with /.
-	Allowed generators are /i, /ir, /ig, /f, /fr, /fg, /s, /sx, /sw, /b, optionally
+	Allowed generators are /i, /ir, /ig, /f, /fr, /fg, /s, /sx, /sw, /b, /k, optionally
 	followed by a single number or a comma-separated pair of numbers.
 	Example generators:
 		- /s -- alphanumeric string of length 16
@@ -172,6 +172,7 @@ func main() {
 		- /u -- https url-like, no query string, two path segments; default cardinality is 10/10 but can be changed like /u3,20
 		- /uq -- as /u above, but with query string containing a random key word with a completely random value
 		- /st -- an http status code by default reflecting 95% 200s, 4% 400s, 1% 500s. 400s and 500s can be changed like /st10,0.1.
+		- /k50,60 -- an intermittent key field with total cardinality 50, but decreasing key frequency. All keys only arrive after 60 seconds
 
 	Field names can be alphanumeric with underscores. If a field name is prefixed with
 	a number and a dot (e.g. 1.foo=bar) the field will only be injected into spans at
