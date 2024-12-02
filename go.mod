@@ -1,8 +1,7 @@
 module github.com/honeycombio/loadgen
 
 go 1.21
-
-toolchain go1.21.1
+toolchain go1.22.5
 
 require (
 	github.com/dgryski/go-wyhash v0.0.0-20191203203029-c4841ae36371
@@ -10,8 +9,8 @@ require (
 	github.com/honeycombio/beeline-go v1.18.0
 	github.com/honeycombio/otel-config-go v1.17.0
 	github.com/jessevdk/go-flags v1.6.1
-	go.opentelemetry.io/otel v1.28.0
-	go.opentelemetry.io/otel/trace v1.28.0
+	go.opentelemetry.io/otel v1.32.0
+	go.opentelemetry.io/otel/trace v1.32.0
 	gopkg.in/yaml.v3 v3.0.1
 	pgregory.net/rand v1.0.2
 )
@@ -48,7 +47,7 @@ require (
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace v1.28.0 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc v1.28.0 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp v1.28.0 // indirect
-	go.opentelemetry.io/otel/metric v1.28.0 // indirect
+	go.opentelemetry.io/otel/metric v1.32.0 // indirect
 	go.opentelemetry.io/otel/sdk v1.28.0 // indirect
 	go.opentelemetry.io/otel/sdk/metric v1.28.0 // indirect
 	go.opentelemetry.io/proto/otlp v1.3.1 // indirect
