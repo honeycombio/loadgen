@@ -98,7 +98,7 @@ func (t *SenderOTel) Close() {
 
 func (t *SenderOTel) CreateTrace(ctx context.Context, name string, service string, fielder *Fielder, count int64) (context.Context, Sendable) {
 	log := NewLogger(0)
-	log.Printf("creating trace %s for service %s.\n", name, service)
+	// log.Printf("creating trace %s for service %s.\n", name, service)
 	tracer, exists := t.tracers[service]
 	if !exists {
 		log.Fatal("service %s not found", service)
