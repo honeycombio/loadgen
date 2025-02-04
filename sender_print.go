@@ -40,6 +40,7 @@ func (t *traceInfo) span(parent string) *traceInfo {
 type PrintSendable struct {
 	TInfo     *traceInfo
 	Name      string
+	Service   string
 	StartTime time.Time
 	Fields    map[string]interface{}
 	log       Logger
@@ -68,7 +69,7 @@ func (t *SenderPrint) Close() {
 
 type PrintKey string
 
-func (t *SenderPrint) CreateTrace(ctx context.Context, name string, fielder *Fielder, count int64) (context.Context, Sendable) {
+func (t *SenderPrint) CreateTrace(ctx context.Context, name string, service string, fielder *Fielder, count int64) (context.Context, Sendable) {
 	t.tracecount++
 	t.nspans++
 	tinfo := &traceInfo{
@@ -79,6 +80,7 @@ func (t *SenderPrint) CreateTrace(ctx context.Context, name string, fielder *Fie
 	ctx = context.WithValue(ctx, PrintKey("trace"), tinfo)
 	return ctx, &PrintSendable{
 		Name:      name,
+		Service:   service,
 		TInfo:     tinfo,
 		StartTime: time.Now(),
 		Fields:    fielder.GetFields(count, 0),
@@ -86,12 +88,13 @@ func (t *SenderPrint) CreateTrace(ctx context.Context, name string, fielder *Fie
 	}
 }
 
-func (t *SenderPrint) CreateSpan(ctx context.Context, name string, level int, fielder *Fielder) (context.Context, Sendable) {
+func (t *SenderPrint) CreateSpan(ctx context.Context, name string, service string, level int, fielder *Fielder) (context.Context, Sendable) {
 	t.nspans++
 	tinfo := ctx.Value(PrintKey("trace")).(*traceInfo)
 	ctx = context.WithValue(ctx, PrintKey("trace"), tinfo.span(tinfo.SpanId))
 	return ctx, &PrintSendable{
 		Name:      name,
+		Service:   service,
 		TInfo:     tinfo.span(tinfo.SpanId),
 		StartTime: time.Now(),
 		Fields:    fielder.GetFields(0, level),

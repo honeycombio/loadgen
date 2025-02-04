@@ -23,10 +23,11 @@ var ResourceVersion = "dev"
 
 type Options struct {
 	Telemetry struct {
-		Host     string `long:"host" description:"the url of the host to receive the telemetry (or honeycomb, dogfood, local)" default:"honeycomb"`
-		Insecure bool   `long:"insecure" description:"use this for insecure http (not https) connections" yaml:",omitempty"`
-		Dataset  string `long:"dataset" description:"sends all traces to the given dataset" env:"HONEYCOMB_DATASET" default:"loadgen"`
-		APIKey   string `long:"apikey" description:"the honeycomb API key(*)" env:"HONEYCOMB_API_KEY" yaml:"-"`
+		Host     string   `long:"host" description:"the url of the host to receive the telemetry (or honeycomb, dogfood, local)" default:"honeycomb"`
+		Insecure bool     `long:"insecure" description:"use this for insecure http (not https) connections" yaml:",omitempty"`
+		Dataset  string   `long:"dataset" description:"sends all traces to the given dataset" env:"HONEYCOMB_DATASET" default:"loadgen"`
+		Services []string `long:"services" description:"list of services to send traces as. Only works with otel" env:"HONEYCOMB_SERVICES" default:""`
+		APIKey   string   `long:"apikey" description:"the honeycomb API key(*)" env:"HONEYCOMB_API_KEY" yaml:"-"`
 	} `group:"Telemetry Options"`
 	Format struct {
 		Depth     int           `long:"depth" description:"the nesting depth of each trace" default:"3"`
@@ -264,6 +265,16 @@ func main() {
 		sender = NewSenderHoneycomb(opts)
 	case "otel":
 		sender = NewSenderOTel(log, opts)
+	}
+
+	// If we're passing a services list, make sure we're using the otel sender
+	if len(opts.Telemetry.Services) > 0 && opts.Output.Sender != "otel" {
+		log.Fatal("services can only be specified when using the otel sender")
+	}
+
+	// If we're using the otel sender, make sure we have a services list
+	if opts.Output.Sender == "otel" && len(opts.Telemetry.Services) == 0 {
+		log.Fatal("services must be specified when using the otel sender")
 	}
 
 	// create a stop channel so we can shut down gracefully

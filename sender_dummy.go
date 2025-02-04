@@ -60,13 +60,13 @@ func (t *SenderDummy) Close() {
 	t.log.Warn("sender sent %d traces with %d spans\n", t.tracecount, t.nspans)
 }
 
-func (t *SenderDummy) CreateTrace(ctx context.Context, name string, fielder *Fielder, count int64) (context.Context, Sendable) {
+func (t *SenderDummy) CreateTrace(ctx context.Context, name string, service string, fielder *Fielder, count int64) (context.Context, Sendable) {
 	t.tracecount++
 	t.nspans++
 	return ctx, DummySendable{}
 }
 
-func (t *SenderDummy) CreateSpan(ctx context.Context, name string, level int, fielder *Fielder) (context.Context, Sendable) {
+func (t *SenderDummy) CreateSpan(ctx context.Context, name string, service string, level int, fielder *Fielder) (context.Context, Sendable) {
 	t.nspans++
 	return ctx, DummySendable{}
 }

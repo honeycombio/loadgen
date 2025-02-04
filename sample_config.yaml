@@ -3,22 +3,31 @@
 # Note that you must specify HONEYCOMB_API_KEY in your environment
 # or --apikey on the command line to authenticate with Honeycomb.
 telemetry:
-    dataset: my-dataset
+  host: "api.honeycomb.io:443"
+  services:
+    - "stargate"
+    - "apollo"
+    - "gemini"
+    - "mercury"
+    - "artemis"
+    - "pioneer"
+    - "frontiers"
 format:
-    depth: 5
-    nspans: 100
-    tracetime: 10s
+  depth: 6
+  nspans: 100
+  tracetime: 5s
 quantity:
-    tps: 1
-    tracecount: 2
-    ramptime: 1s
+  tps: 100
+  tracecount: 2000
+  ramptime: 1s
 output:
-    sender: honeycomb
-    protocol: grpc
+  sender: otel
+  protocol: grpc
 global:
-    loglevel: warn
+  loglevel: warn
 fields:
-    # simulate URLs for 10 services, each of which has 10 endpoints
-	http.url: /u10,10
+  # simulate URLs for 10 services, each of which has 10 endpoints
+  http.url:
+    /u10,10
     # generate status codes where 10% are 400s and .1% are 500s
-	http.status: /st10,0.1
+  http.status: /st10,0.1
