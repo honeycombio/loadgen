@@ -34,6 +34,7 @@ type TraceGenerator struct {
 	mut        sync.RWMutex
 	log        Logger
 	tracer     Sender
+	services   []string
 }
 
 // make sure it implements Generator
@@ -49,6 +50,7 @@ func NewTraceGenerator(tsender Sender, getFielder func() *Fielder, log Logger, o
 		chans:      chans,
 		log:        log,
 		tracer:     tsender,
+		services:   opts.Telemetry.Services,
 	}
 }
 
@@ -92,10 +94,16 @@ func (s *TraceGenerator) generate_spans(ctx context.Context, fielder *Fielder, l
 	durationPerChild := (timeRemaining - durationRemaining) / time.Duration(spansAtThisLevel)
 
 	for i := 0; i < spansAtThisLevel; i++ {
+		var service string
+		if depth < len(s.services) {
+			service = s.services[depth]
+		} else {
+			service = s.services[len(s.services)-1]
+		}
 		durationThisSpan := durationRemaining / time.Duration(spansAtThisLevel-i)
 		durationRemaining -= durationThisSpan
 		time.Sleep(durationThisSpan / 2)
-		childctx, span := s.tracer.CreateSpan(ctx, fielder.GetServiceName(depth), level, fielder)
+		childctx, span := s.tracer.CreateSpan(ctx, fielder.GetServiceName(depth), service, level, fielder)
 		s.generate_spans(childctx, fielder, level+1, depth-1, spancounts[i]-1, durationPerChild)
 		time.Sleep(durationThisSpan / 2)
 		span.Send()
@@ -103,8 +111,9 @@ func (s *TraceGenerator) generate_spans(ctx context.Context, fielder *Fielder, l
 }
 
 func (s *TraceGenerator) generate_root(fielder *Fielder, count int64, depth int, nspans int, timeRemaining time.Duration) {
+	service := s.services[0]
 	ctx := context.Background()
-	ctx, root := s.tracer.CreateTrace(ctx, fielder.GetServiceName(depth), fielder, count)
+	ctx, root := s.tracer.CreateTrace(ctx, fielder.GetServiceName(depth), service, fielder, count)
 	thisSpanDuration := time.Duration(rand.Intn(int(timeRemaining) / (nspans + 1)))
 	childDuration := (timeRemaining - thisSpanDuration)
 

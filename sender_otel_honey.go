@@ -24,7 +24,7 @@ func (s OTelSendable) Send() {
 }
 
 type SenderOTel struct {
-	tracer   trace.Tracer
+	tracers  map[string]trace.Tracer
 	shutdown func()
 }
 
@@ -58,24 +58,37 @@ func NewSenderOTel(log Logger, opts *Options) *SenderOTel {
 		log.Fatal("unknown protocol: %s", opts.Output.Protocol)
 	}
 
-	otelshutdown, err := otelconfig.ConfigureOpenTelemetry(
-		otelconfig.WithExporterProtocol(protocol),
-		otelconfig.WithServiceName(opts.Telemetry.Dataset),
-		otelconfig.WithTracesExporterEndpoint(otelTracesFromURL(opts.apihost)),
-		otelconfig.WithTracesExporterInsecure(opts.Telemetry.Insecure),
-		otelconfig.WithMetricsEnabled(false),
-		otelconfig.WithLogLevel(opts.Global.LogLevel),
-		otelconfig.WithLogger(OtelLogger{log}),
-		otelconfig.WithHeaders(map[string]string{
-			"x-honeycomb-team": opts.Telemetry.APIKey,
-		}),
-	)
-	if err != nil {
-		log.Fatal("failure configuring otel: %v", err)
+	tracers := make(map[string]trace.Tracer)
+	var shutdownFuncs []func()
+
+	services := []string(opts.Telemetry.Services)
+	for _, service := range services {
+		shutdown, err := otelconfig.ConfigureOpenTelemetry(
+			otelconfig.WithExporterProtocol(protocol),
+			otelconfig.WithServiceName(service),
+			otelconfig.WithTracesExporterEndpoint(otelTracesFromURL(opts.apihost)),
+			otelconfig.WithTracesExporterInsecure(opts.Telemetry.Insecure),
+			otelconfig.WithMetricsEnabled(false),
+			otelconfig.WithLogLevel(opts.Global.LogLevel),
+			otelconfig.WithLogger(OtelLogger{log}),
+			otelconfig.WithHeaders(map[string]string{
+				"x-honeycomb-team": opts.Telemetry.APIKey,
+			}),
+		)
+		if err != nil {
+			log.Fatal("failure configuring otel for service %s: %v", service, err)
+		}
+		shutdownFuncs = append(shutdownFuncs, shutdown)
+		tracers[service] = otel.Tracer(ResourceLibrary, trace.WithInstrumentationVersion(ResourceVersion))
 	}
+
 	return &SenderOTel{
-		tracer:   otel.Tracer(ResourceLibrary, trace.WithInstrumentationVersion(ResourceVersion)),
-		shutdown: otelshutdown,
+		tracers: tracers,
+		shutdown: func() {
+			for _, shutdown := range shutdownFuncs {
+				shutdown()
+			}
+		},
 	}
 }
 
@@ -83,16 +96,28 @@ func (t *SenderOTel) Close() {
 	t.shutdown()
 }
 
-func (t *SenderOTel) CreateTrace(ctx context.Context, name string, fielder *Fielder, count int64) (context.Context, Sendable) {
-	ctx, root := t.tracer.Start(ctx, name)
+func (t *SenderOTel) CreateTrace(ctx context.Context, name string, service string, fielder *Fielder, count int64) (context.Context, Sendable) {
+	log := NewLogger(0)
+	// log.Printf("creating trace %s for service %s.\n", name, service)
+	tracer, exists := t.tracers[service]
+	if !exists {
+		log.Fatal("service %s not found", service)
+	}
+	ctx, root := tracer.Start(ctx, name)
 	fielder.AddFields(root, count, 0)
 	var ots OTelSendable
 	ots.Span = root
 	return ctx, ots
 }
 
-func (t *SenderOTel) CreateSpan(ctx context.Context, name string, level int, fielder *Fielder) (context.Context, Sendable) {
-	ctx, span := t.tracer.Start(ctx, name)
+func (t *SenderOTel) CreateSpan(ctx context.Context, name string, service string, level int, fielder *Fielder) (context.Context, Sendable) {
+	log := NewLogger(0)
+	// log.Printf("creating span %s for service %s.\n", name, service)
+	tracer, exists := t.tracers[service]
+	if !exists {
+		log.Fatal("service %s not found", service)
+	}
+	ctx, span := tracer.Start(ctx, name)
 	if rand.Intn(10) == 0 {
 		span.AddEvent("exception", trace.WithAttributes(
 			attribute.KeyValue{Key: "exception.type", Value: attribute.StringValue("error")},
