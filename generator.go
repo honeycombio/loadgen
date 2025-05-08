@@ -60,15 +60,19 @@ func NewTraceGenerator(tsender Sender, getFielder func() *Fielder, log Logger, o
 // If nspans is less than depth, the trace will be truncated at nspans.
 // If nspans is greater than depth, some of the children will have siblings.
 func (s *TraceGenerator) generate_spans(ctx context.Context, fielder *Fielder, level int, depth int, nspans int, timeRemaining time.Duration) {
-	if depth == 0 || nspans == 0 {
+	if nspans == 0 || timeRemaining <= 0 {
+		// if there's still time remaining, sleep for the remainder of the time
+		if timeRemaining > 0 {
+			time.Sleep(timeRemaining)
+		}
 		return
 	}
 
 	spansAtThisLevel := 1
-	if nspans > depth {
+	if nspans > depth && depth >= 0 {
 		// there is some chance that this level will have multiple spans based on the difference
 		// between nspans and depth. (but we'll override this if it's a root span)
-		// nspans is always between 1 and nspans
+		// spanAtThisLevel is always between 1 and nspans
 		spansAtThisLevel = 1 + rand.Intn(nspans-depth)
 	}
 
@@ -95,7 +99,7 @@ func (s *TraceGenerator) generate_spans(ctx context.Context, fielder *Fielder, l
 		durationThisSpan := durationRemaining / time.Duration(spansAtThisLevel-i)
 		durationRemaining -= durationThisSpan
 		time.Sleep(durationThisSpan / 2)
-		childctx, span := s.tracer.CreateSpan(ctx, fielder.GetServiceName(depth), level, fielder)
+		childctx, span := s.tracer.CreateSpan(ctx, fielder.GetServiceName(i+1), level, fielder)
 		s.generate_spans(childctx, fielder, level+1, depth-1, spancounts[i]-1, durationPerChild)
 		time.Sleep(durationThisSpan / 2)
 		span.Send()
@@ -129,6 +133,7 @@ func (s *TraceGenerator) generator(wg *sync.WaitGroup, counter chan int64) {
 	ticker := time.NewTicker(duration)
 	fielder := s.getFielder()
 	defer wg.Done()
+
 	for {
 		select {
 		case <-stop:
