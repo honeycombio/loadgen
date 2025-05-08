@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"math"
 	"sync"
 	"time"
 
@@ -59,7 +60,7 @@ func NewTraceGenerator(tsender Sender, getFielder func() *Fielder, log Logger, o
 // - nspans is the number of spans in a trace.
 // If nspans is less than depth, the trace will be truncated at nspans.
 // If nspans is greater than depth, some of the children will have siblings.
-func (s *TraceGenerator) generate_spans(ctx context.Context, fielder *Fielder, level int, depth int, nspans int, timeRemaining time.Duration) {
+func (s *TraceGenerator) generate_spans(ctx context.Context, fielder *Fielder, level int, depth int, nspans int, timeRemaining time.Duration, debugCount *int) {
 	if nspans == 0 || timeRemaining <= 0 {
 		// if there's still time remaining, sleep for the remainder of the time
 		if timeRemaining > 0 {
@@ -92,7 +93,7 @@ func (s *TraceGenerator) generate_spans(ctx context.Context, fielder *Fielder, l
 		spancounts[rand.Intn(spansAtThisLevel)] += count
 	}
 
-	durationRemaining := time.Duration(rand.Intn(int(timeRemaining) / (nspans + 1)))
+	durationRemaining := time.Duration(rand.Intn(int(math.Ceil((float64(timeRemaining) / float64(nspans+1))))))
 	durationPerChild := (timeRemaining - durationRemaining) / time.Duration(spansAtThisLevel)
 
 	for i := 0; i < spansAtThisLevel; i++ {
@@ -100,7 +101,8 @@ func (s *TraceGenerator) generate_spans(ctx context.Context, fielder *Fielder, l
 		durationRemaining -= durationThisSpan
 		time.Sleep(durationThisSpan / 2)
 		childctx, span := s.tracer.CreateSpan(ctx, fielder.GetServiceName(i+1), level, fielder)
-		s.generate_spans(childctx, fielder, level+1, depth-1, spancounts[i]-1, durationPerChild)
+		*debugCount = *debugCount + 1
+		s.generate_spans(childctx, fielder, level+1, depth-1, spancounts[i]-1, durationPerChild, debugCount)
 		time.Sleep(durationThisSpan / 2)
 		span.Send()
 	}
@@ -112,10 +114,12 @@ func (s *TraceGenerator) generate_root(fielder *Fielder, count int64, depth int,
 	thisSpanDuration := time.Duration(rand.Intn(int(timeRemaining) / (nspans + 1)))
 	childDuration := (timeRemaining - thisSpanDuration)
 
+	debugCount := 0
 	time.Sleep(thisSpanDuration / 2)
-	s.generate_spans(ctx, fielder, 1, depth-1, nspans-1, childDuration)
+	s.generate_spans(ctx, fielder, 1, depth-1, nspans-1, childDuration, &debugCount)
 	time.Sleep(thisSpanDuration / 2)
 	root.Send()
+	s.log.Debug("generated %d spans\n", debugCount)
 }
 
 // generator is a single goroutine that generates traces and sends them to the spans channel.
