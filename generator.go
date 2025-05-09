@@ -78,7 +78,7 @@ func (s *TraceGenerator) generate_spans(ctx context.Context, fielder *Fielder, l
 	if nspans > depth && depth >= 0 {
 		// there is some chance that this level will have multiple spans based on the difference
 		// between nspans and depth. (but we'll override this if it's a root span)
-		// spanAtThisLevel is always between 1 and nspans
+		// spansAtThisLevel is always between 1 and nspans
 		spansAtThisLevel = 1 + rand.Intn(nspans-depth)
 	}
 
