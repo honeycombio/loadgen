@@ -58,6 +58,7 @@ func NewTraceGenerator(tsender Sender, getFielder func() *Fielder, log Logger, o
 // - level is the current depth of this span where 0 is the root span
 // - depth is the maximum depth (nesting level) of a trace -- how much deeper this trace will go
 // - nspans is the number of spans in a trace.
+// - numOfSpansGenerated is a pointer to the number of spans generated so far. This is only used for debugging.
 // If nspans is less than depth, the trace will be truncated at nspans.
 // If nspans is greater than depth, some of the children will have siblings.
 func (s *TraceGenerator) generate_spans(ctx context.Context, fielder *Fielder, level int, depth int, nspans int, timeRemaining time.Duration, numOfSpansGenerated *int) {
