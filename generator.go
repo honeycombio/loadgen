@@ -60,8 +60,12 @@ func NewTraceGenerator(tsender Sender, getFielder func() *Fielder, log Logger, o
 // - nspans is the number of spans in a trace.
 // If nspans is less than depth, the trace will be truncated at nspans.
 // If nspans is greater than depth, some of the children will have siblings.
-func (s *TraceGenerator) generate_spans(ctx context.Context, fielder *Fielder, level int, depth int, nspans int, timeRemaining time.Duration, debugCount *int) {
-	if nspans == 0 || timeRemaining <= 0 {
+func (s *TraceGenerator) generate_spans(ctx context.Context, fielder *Fielder, level int, depth int, nspans int, timeRemaining time.Duration, numOfSpansGenerated *int) {
+	if timeRemaining <= 0 {
+		return
+	}
+
+	if nspans == 0 {
 		// if there's still time remaining, sleep for the remainder of the time
 		if timeRemaining > 0 {
 			time.Sleep(timeRemaining)
@@ -101,8 +105,8 @@ func (s *TraceGenerator) generate_spans(ctx context.Context, fielder *Fielder, l
 		durationRemaining -= durationThisSpan
 		time.Sleep(durationThisSpan / 2)
 		childctx, span := s.tracer.CreateSpan(ctx, fielder.GetServiceName(i+1), level, fielder)
-		*debugCount = *debugCount + 1
-		s.generate_spans(childctx, fielder, level+1, depth-1, spancounts[i]-1, durationPerChild, debugCount)
+		*numOfSpansGenerated = *numOfSpansGenerated + 1
+		s.generate_spans(childctx, fielder, level+1, depth-1, spancounts[i]-1, durationPerChild, numOfSpansGenerated)
 		time.Sleep(durationThisSpan / 2)
 		span.Send()
 	}
@@ -114,12 +118,12 @@ func (s *TraceGenerator) generate_root(fielder *Fielder, count int64, depth int,
 	thisSpanDuration := time.Duration(rand.Intn(int(timeRemaining) / (nspans + 1)))
 	childDuration := (timeRemaining - thisSpanDuration)
 
-	debugCount := 0
+	numOfSpansGenerated := 1
 	time.Sleep(thisSpanDuration / 2)
-	s.generate_spans(ctx, fielder, 1, depth-1, nspans-1, childDuration, &debugCount)
+	s.generate_spans(ctx, fielder, 1, depth-1, nspans-1, childDuration, &numOfSpansGenerated)
 	time.Sleep(thisSpanDuration / 2)
 	root.Send()
-	s.log.Debug("generated %d spans\n", debugCount)
+	s.log.Debug("generated %d spans\n", numOfSpansGenerated)
 }
 
 // generator is a single goroutine that generates traces and sends them to the spans channel.
