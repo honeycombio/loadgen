@@ -149,6 +149,7 @@ func (s *TraceGenerator) generate_root(fielder *Fielder, count int64, depth int,
 	time.Sleep(thisSpanDuration / 2)
 	totalSpanCreated := s.generate_spans(ctx, fielder, 1, depth-1, nspans-1, childDuration)
 	time.Sleep(thisSpanDuration / 2)
+	totalSpanCreated++
 	root.Send()
 	s.log.Debug("generated %d spans within %v\n", totalSpanCreated, time.Since(now))
 }
