@@ -2,14 +2,22 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"math/rand"
 	"net/url"
 
-	"github.com/honeycombio/otel-config-go/otelconfig"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/exporters/otlp/otlptrace"
+	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
+	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
+	"go.opentelemetry.io/otel/sdk/resource"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	semconv "go.opentelemetry.io/otel/semconv/v1.4.0"
 	"go.opentelemetry.io/otel/trace"
+	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/encoding/gzip"
 )
 
 // make sure it implements Sender
@@ -46,33 +54,49 @@ func (l OtelLogger) Fatalf(format string, args ...interface{}) {
 }
 
 func NewSenderOTel(log Logger, opts *Options) *SenderOTel {
-	var protocol otelconfig.Protocol
+	var client otlptrace.Client
 	switch opts.Output.Protocol {
 	case "grpc":
-		protocol = otelconfig.ProtocolGRPC
-	case "protobuf":
-		protocol = otelconfig.ProtocolHTTPProto
-	case "json":
-		protocol = otelconfig.ProtocolHTTPJSON
+		client = setupOTELGRPCClient(opts)
+	case "http":
+		client = setupOTELHTTPClient(opts)
 	default:
 		log.Fatal("unknown protocol: %s", opts.Output.Protocol)
 	}
 
-	otelshutdown, err := otelconfig.ConfigureOpenTelemetry(
-		otelconfig.WithExporterProtocol(protocol),
-		otelconfig.WithServiceName(opts.Telemetry.Dataset),
-		otelconfig.WithTracesExporterEndpoint(otelTracesFromURL(opts.apihost)),
-		otelconfig.WithTracesExporterInsecure(opts.Telemetry.Insecure),
-		otelconfig.WithMetricsEnabled(false),
-		otelconfig.WithLogLevel(opts.Global.LogLevel),
-		otelconfig.WithLogger(OtelLogger{log}),
-		otelconfig.WithHeaders(map[string]string{
-			"x-honeycomb-team": opts.Telemetry.APIKey,
-		}),
+	exporter, err := otlptrace.New(
+		context.Background(),
+		client,
 	)
 	if err != nil {
-		log.Fatal("failure configuring otel: %v", err)
+		log.Fatal("failure configuring otel trace exporter: %v", err)
 	}
+
+	var bspOpts []sdktrace.BatchSpanProcessorOption
+	if opts.Output.BatchTimeout != 0 {
+		bspOpts = append(bspOpts, sdktrace.WithBatchTimeout(opts.Output.BatchTimeout))
+	}
+
+	if opts.Output.MaxQueueSize != 0 {
+		bspOpts = append(bspOpts, sdktrace.WithMaxQueueSize(opts.Output.MaxQueueSize))
+	}
+	if opts.Output.MaxExportBatchSize != 0 {
+		bspOpts = append(bspOpts, sdktrace.WithMaxExportBatchSize(opts.Output.MaxExportBatchSize))
+	}
+	if opts.Output.ExportTimeout != 0 {
+		bspOpts = append(bspOpts, sdktrace.WithExportTimeout(opts.Output.ExportTimeout))
+	}
+
+	bsp := sdktrace.NewBatchSpanProcessor(exporter, bspOpts...)
+	otel.SetTracerProvider(sdktrace.NewTracerProvider(
+		sdktrace.WithSpanProcessor(bsp),
+		sdktrace.WithResource(resource.NewWithAttributes(semconv.SchemaURL, semconv.ServiceNameKey.String(opts.Telemetry.Dataset))),
+	))
+	otelshutdown := func() {
+		_ = bsp.Shutdown(context.Background())
+		_ = exporter.Shutdown(context.Background())
+	}
+
 	return &SenderOTel{
 		tracer:   otel.Tracer(ResourceLibrary, trace.WithInstrumentationVersion(ResourceVersion)),
 		shutdown: otelshutdown,
@@ -105,4 +129,40 @@ func (t *SenderOTel) CreateSpan(ctx context.Context, name string, level int, fie
 	var ots OTelSendable
 	ots.Span = span
 	return ctx, ots
+}
+
+func setupOTELHTTPClient(opts *Options) otlptrace.Client {
+	options := []otlptracehttp.Option{
+		otlptracehttp.WithEndpoint(opts.apihost.Host),
+		otlptracehttp.WithHeaders(map[string]string{
+			"x-honeycomb-team": opts.Telemetry.APIKey,
+		}),
+		otlptracehttp.WithCompression(otlptracehttp.GzipCompression),
+	}
+	if opts.Telemetry.Insecure {
+		options = append(options, otlptracehttp.WithInsecure())
+	} else {
+		options = append(options, otlptracehttp.WithTLSClientConfig(&tls.Config{}))
+	}
+	return otlptracehttp.NewClient(
+		options...,
+	)
+}
+
+func setupOTELGRPCClient(opts *Options) otlptrace.Client {
+	options := []otlptracegrpc.Option{
+		otlptracegrpc.WithEndpoint(opts.apihost.Host),
+		otlptracegrpc.WithHeaders(map[string]string{
+			"x-honeycomb-team": opts.Telemetry.APIKey,
+		}),
+		otlptracegrpc.WithCompressor(gzip.Name),
+	}
+	if opts.Telemetry.Insecure {
+		options = append(options, otlptracegrpc.WithInsecure())
+	} else {
+		options = append(options, otlptracegrpc.WithTLSCredentials(credentials.NewClientTLSFromCert(nil, "")))
+	}
+	return otlptracegrpc.NewClient(
+		options...,
+	)
 }
