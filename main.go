@@ -233,6 +233,10 @@ func main() {
 		os.Exit(0)
 	}
 
+	if opts.Global.Seed == "" {
+		opts.Global.Seed = opts.Telemetry.Dataset
+	}
+
 	if opts.Global.DebugPort > 0 {
 		go func() {
 			http.ListenAndServe(fmt.Sprintf("localhost:%d", opts.Global.DebugPort), nil)
