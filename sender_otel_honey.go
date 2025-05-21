@@ -57,9 +57,9 @@ func NewSenderOTel(log Logger, opts *Options) *SenderOTel {
 	var client otlptrace.Client
 	switch opts.Output.Protocol {
 	case "grpc":
-		client = setupOTELGRPCClient(opts)
+		client = setupOTelGRPCClient(opts)
 	case "http":
-		client = setupOTELHTTPClient(opts)
+		client = setupOTelHTTPClient(opts)
 	default:
 		log.Fatal("unknown protocol: %s", opts.Output.Protocol)
 	}
@@ -131,7 +131,7 @@ func (t *SenderOTel) CreateSpan(ctx context.Context, name string, level int, fie
 	return ctx, ots
 }
 
-func setupOTELHTTPClient(opts *Options) otlptrace.Client {
+func setupOTelHTTPClient(opts *Options) otlptrace.Client {
 	options := []otlptracehttp.Option{
 		otlptracehttp.WithEndpoint(opts.apihost.Host),
 		otlptracehttp.WithHeaders(map[string]string{
@@ -149,7 +149,7 @@ func setupOTELHTTPClient(opts *Options) otlptrace.Client {
 	)
 }
 
-func setupOTELGRPCClient(opts *Options) otlptrace.Client {
+func setupOTelGRPCClient(opts *Options) otlptrace.Client {
 	options := []otlptracegrpc.Option{
 		otlptracegrpc.WithEndpoint(opts.apihost.Host),
 		otlptracegrpc.WithHeaders(map[string]string{

@@ -43,10 +43,10 @@ type Options struct {
 	Output struct {
 		Sender             string        `long:"sender" description:"type of sender" choice:"honeycomb" choice:"otel" choice:"print" choice:"dummy" default:"honeycomb"`
 		Protocol           string        `long:"protocol" description:"for otel only, protocol to use" choice:"grpc" choice:"http" default:"grpc"`
-		MaxQueueSize       int           `long:"maxqueuesize" description:"for otel only, maximum number of spans to queue before dropping" default:"0"`
-		MaxExportBatchSize int           `long:"maxexportbatchsize" description:"for otel only, maximum number of spans to export at once" default:"0"`
-		BatchTimeout       time.Duration `long:"batchtimeout" description:"for otel only, maximum time to wait before sending a batch" default:"0s"`
-		ExportTimeout      time.Duration `long:"exporttimeout" description:"for otel only, maximum time to wait for a batch to be sent" default:"0s"`
+		MaxQueueSize       int           `long:"maxqueuesize" description:"for otel only, maximum number of spans to queue before dropping"`
+		MaxExportBatchSize int           `long:"maxexportbatchsize" description:"for otel only, maximum number of spans to export at once"`
+		BatchTimeout       time.Duration `long:"batchtimeout" description:"for otel only, maximum time to wait before sending a batch"`
+		ExportTimeout      time.Duration `long:"exporttimeout" description:"for otel only, maximum time to wait for a batch to be sent"`
 	} `group:"Output Options"`
 	Global struct {
 		LogLevel  string `long:"loglevel" description:"level of logging" choice:"debug" choice:"info" choice:"warn" choice:"error" default:"warn"`
