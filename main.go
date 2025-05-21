@@ -46,7 +46,7 @@ type Options struct {
 		MaxQueueSize       int           `long:"maxqueuesize" description:"for otel only, maximum number of spans to queue before dropping"`
 		MaxExportBatchSize int           `long:"maxexportbatchsize" description:"for otel only, maximum number of spans to export at once"`
 		BatchTimeout       time.Duration `long:"batchtimeout" description:"for otel only, maximum time to wait before sending a batch"`
-		ExportTimeout      time.Duration `long:"exporttimeout" description:"for otel only, maximum time to wait for a batch to be sent"`
+		ExportTimeout      time.Duration `long:"exporttimeout" description:"for otel only, maximum time to wait for a batch send to be completed"`
 	} `group:"Output Options"`
 	Global struct {
 		LogLevel  string `long:"loglevel" description:"level of logging" choice:"debug" choice:"info" choice:"warn" choice:"error" default:"warn"`
