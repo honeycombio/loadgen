@@ -4,6 +4,7 @@ go 1.24
 
 require (
 	github.com/dgryski/go-wyhash v0.0.0-20191203203029-c4841ae36371
+	github.com/golang/protobuf v1.5.4
 	github.com/goware/urlx v0.3.2
 	github.com/honeycombio/beeline-go v1.19.0
 	github.com/jessevdk/go-flags v1.6.1
