@@ -26,22 +26,26 @@ type Options struct {
 
 // TraceServer processes incoming trace data
 type TraceServer struct {
-	traces *cuckoo.Filter
-	spans  *cuckoo.Filter
+	traces      *cuckoo.Filter
+	spans       *cuckoo.Filter
+	rateTracker *SpanRateTracker
 }
 
 func NewTraceServer() *TraceServer {
 	return &TraceServer{
-		traces: cuckoo.NewFilter(1000000),
-		spans:  cuckoo.NewFilter(100000000),
+		traces:      cuckoo.NewFilter(1000000),
+		spans:       cuckoo.NewFilter(100000000),
+		rateTracker: NewSpanRateTracker(),
 	}
 }
 
 // ProcessTraceRequest handles both JSON and Protobuf-encoded trace data
 func (t *TraceServer) ProcessTraceRequest(req *collectortrace.ExportTraceServiceRequest) {
+	var spanCount int
 	for _, resource := range req.GetResourceSpans() {
 		for _, scope := range resource.GetScopeSpans() {
 			for _, span := range scope.GetSpans() {
+				spanCount++
 				traceID := span.GetTraceId()
 				spanID := span.GetSpanId()
 				if !t.traces.Lookup(traceID) {
@@ -53,6 +57,8 @@ func (t *TraceServer) ProcessTraceRequest(req *collectortrace.ExportTraceService
 			}
 		}
 	}
+
+	t.rateTracker.TrackSpans(spanCount)
 }
 
 func initHTTPReceiver(ctx context.Context, opts Options, ts *TraceServer) error {
@@ -64,7 +70,6 @@ func initHTTPReceiver(ctx context.Context, opts Options, ts *TraceServer) error 
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
-		fmt.Println("received request on /v1/traces")
 
 		// Read request body
 		var reader io.ReadCloser = r.Body
@@ -115,6 +120,22 @@ func initHTTPReceiver(ctx context.Context, opts Options, ts *TraceServer) error 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("{}"))
+	})
+
+	mux.HandleFunc("/stats", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		stats := map[string]interface{}{
+			"traces": ts.traces.Count(),
+			"spans":  ts.spans.Count(),
+			"rates":  ts.rateTracker.GetRateSummary(),
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(stats)
 	})
 
 	// Create HTTP server
@@ -177,7 +198,18 @@ func main() {
 
 	// Wait for termination signal
 	<-ctx.Done()
+	// Get final stats
+	rateSummary := ts.rateTracker.GetRateSummary()
+	fmt.Printf("\nTrace Statistics:\n")
+	fmt.Printf("----------------\n")
+	fmt.Printf("Total Traces: %d\n", ts.traces.Count())
+	fmt.Printf("Total Spans: %d\n", ts.spans.Count())
+	fmt.Printf("Running Time: %.2f seconds\n", rateSummary["running_time_seconds"])
+	fmt.Printf("Average Rate: %.2f spans/second\n", rateSummary["average_rate"])
+	fmt.Printf("Recent Rates (spans/second):\n")
+	fmt.Printf("  Last 1s:  %.2f\n", rateSummary["spans_per_second_1s"])
+	fmt.Printf("  Last 10s: %.2f\n", rateSummary["spans_per_second_10s"])
+	fmt.Printf("  Last 60s: %.2f\n", rateSummary["spans_per_second_60s"])
 
-	fmt.Printf("\n%d traces, %d spans received this session\n", ts.traces.Count(), ts.spans.Count())
 	log.Println("Shutting down gracefully...")
 }
