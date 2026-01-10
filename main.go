@@ -42,6 +42,7 @@ type Options struct {
 	} `group:"Quantity Options"`
 	Output struct {
 		Sender             string        `long:"sender" description:"type of sender" choice:"honeycomb" choice:"otel" choice:"print" choice:"dummy" default:"honeycomb"`
+		Msgpack            bool          `long:"msgpack" description:"use this for emitting honeycomb data format using msgpack"`
 		Protocol           string        `long:"protocol" description:"for otel only, protocol to use" choice:"grpc" choice:"http" default:"grpc"`
 		MaxQueueSize       int           `long:"maxqueuesize" description:"for otel only, maximum number of spans to queue before dropping"`
 		MaxExportBatchSize int           `long:"maxexportbatchsize" description:"for otel only, maximum number of spans to export at once"`
