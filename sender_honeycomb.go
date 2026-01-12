@@ -4,6 +4,8 @@ import (
 	"context"
 
 	"github.com/honeycombio/beeline-go"
+	"github.com/honeycombio/libhoney-go"
+	"github.com/honeycombio/libhoney-go/transmission"
 )
 
 type SenderHoneycomb struct{}
@@ -12,11 +14,22 @@ type SenderHoneycomb struct{}
 var _ Sender = (*SenderHoneycomb)(nil)
 
 func NewSenderHoneycomb(opts *Options) *SenderHoneycomb {
+	libhoneyClient, _ := libhoney.NewClient(libhoney.ClientConfig{
+		APIKey:  opts.Telemetry.APIKey,
+		Dataset: opts.Telemetry.Dataset,
+		APIHost: opts.apihost.String(),
+		Transmission: &transmission.Honeycomb{
+			EnableMsgpackEncoding: opts.Output.Msgpack,
+			MaxBatchSize:          uint(libhoney.DefaultMaxBatchSize),
+			BatchTimeout:          libhoney.DefaultBatchTimeout,
+		},
+	})
 	beeline.Init(beeline.Config{
 		WriteKey:    opts.Telemetry.APIKey,
 		APIHost:     opts.apihost.String(),
 		ServiceName: opts.Telemetry.Dataset,
 		Debug:       opts.DebugLevel() > 2,
+		Client:      libhoneyClient,
 	})
 	return &SenderHoneycomb{}
 }
