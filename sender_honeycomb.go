@@ -16,7 +16,7 @@ var _ Sender = (*SenderHoneycomb)(nil)
 func NewSenderHoneycomb(opts *Options) *SenderHoneycomb {
 	libhoneyClient, _ := libhoney.NewClient(libhoney.ClientConfig{
 		APIKey:  opts.Telemetry.APIKey,
-		Dataset: opts.Telemetry.Dataset,
+		Dataset: opts.Telemetry.Dataset[0],
 		APIHost: opts.apihost.String(),
 		Transmission: &transmission.Honeycomb{
 			EnableMsgpackEncoding: opts.Output.Msgpack,
@@ -27,7 +27,7 @@ func NewSenderHoneycomb(opts *Options) *SenderHoneycomb {
 	beeline.Init(beeline.Config{
 		WriteKey:    opts.Telemetry.APIKey,
 		APIHost:     opts.apihost.String(),
-		ServiceName: opts.Telemetry.Dataset,
+		ServiceName: opts.Telemetry.Dataset[0],
 		Debug:       opts.DebugLevel() > 2,
 		Client:      libhoneyClient,
 	})

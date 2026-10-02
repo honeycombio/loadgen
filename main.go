@@ -23,14 +23,14 @@ var ResourceVersion = "dev"
 
 type Options struct {
 	Telemetry struct {
-		Host     string `long:"host" description:"the url of the host to receive the telemetry (or honeycomb, dogfood, local)" default:"honeycomb"`
-		Insecure bool   `long:"insecure" description:"use this for insecure http (not https) connections" yaml:",omitempty"`
-		Dataset  string `long:"dataset" description:"sends all traces to the given dataset" env:"HONEYCOMB_DATASET" default:"loadgen"`
-		APIKey   string `long:"apikey" description:"the honeycomb API key(*)" env:"HONEYCOMB_API_KEY" yaml:"-"`
+		Host     string   `long:"host" description:"the url of the host to receive the telemetry (or honeycomb, dogfood, local)" default:"honeycomb"`
+		Insecure bool     `long:"insecure" description:"use this for insecure http (not https) connections" yaml:",omitempty"`
+		Dataset  []string `long:"dataset" description:"dataset (service name) to send traces to; repeat to simulate a distributed trace, with one dataset per level starting at the root (otel sender only)" env:"HONEYCOMB_DATASET" default:"loadgen"`
+		APIKey   string   `long:"apikey" description:"the honeycomb API key(*)" env:"HONEYCOMB_API_KEY" yaml:"-"`
 	} `group:"Telemetry Options"`
 	Format struct {
-		Depth     int           `long:"depth" description:"the nesting depth of each trace" default:"3"`
-		NSpans    int           `long:"nspans" description:"the total number of spans in a trace" default:"3"`
+		Depth     int           `long:"depth" description:"the nesting depth of each trace (defaults to the number of datasets if more than one is given, otherwise 3)" default:"0"`
+		NSpans    int           `long:"nspans" description:"the total number of spans in a trace (defaults to the larger of 3 and depth)" default:"0"`
 		Extra     int           `long:"extra" description:"the number of random fields in a span beyond the standard ones" default:"0" yaml:",omitempty"`
 		TraceTime time.Duration `long:"tracetime" description:"the duration of a trace" default:"1s"`
 	} `group:"Trace Format Options"`
@@ -69,6 +69,24 @@ func (o *Options) CopyStarredFieldsFrom(other *Options) {
 	o.Global.DebugPort = other.Global.DebugPort
 	o.Global.Config = other.Global.Config
 	o.Global.WriteCfg = other.Global.WriteCfg
+}
+
+// ApplyDefaults fills in values that depend on other options: there is always
+// at least one dataset, and unless set explicitly the depth matches the number
+// of datasets so that each level of a trace can be a different service.
+func (o *Options) ApplyDefaults() {
+	if len(o.Telemetry.Dataset) == 0 {
+		o.Telemetry.Dataset = []string{"loadgen"}
+	}
+	if o.Format.Depth == 0 {
+		o.Format.Depth = 3
+		if n := len(o.Telemetry.Dataset); n > 1 {
+			o.Format.Depth = n
+		}
+	}
+	if o.Format.NSpans == 0 {
+		o.Format.NSpans = max(3, o.Format.Depth)
+	}
 }
 
 func (o *Options) DebugLevel() int {
@@ -234,8 +252,10 @@ func main() {
 		os.Exit(0)
 	}
 
+	opts.ApplyDefaults()
+
 	if opts.Global.Seed == "" {
-		opts.Global.Seed = opts.Telemetry.Dataset
+		opts.Global.Seed = strings.Join(opts.Telemetry.Dataset, ",")
 	}
 
 	if opts.Global.DebugPort > 0 {
@@ -261,7 +281,7 @@ func main() {
 
 	opts.apihost = parseHost(log, opts.Telemetry.Host, opts.Telemetry.Insecure)
 
-	log.Info("host: %s, dataset: %s, apikey: ...%4.4s\n", opts.apihost.String(), opts.Telemetry.Dataset, opts.Telemetry.APIKey)
+	log.Info("host: %s, dataset: %s, apikey: ...%4.4s\n", opts.apihost.String(), strings.Join(opts.Telemetry.Dataset, ","), opts.Telemetry.APIKey)
 
 	var sender Sender
 	switch opts.Output.Sender {
@@ -270,6 +290,9 @@ func main() {
 	case "print":
 		sender = NewSenderPrint(log, opts)
 	case "honeycomb":
+		if len(opts.Telemetry.Dataset) > 1 {
+			log.Fatal("multiple datasets are only supported by the otel sender\n")
+		}
 		sender = NewSenderHoneycomb(opts)
 	case "otel":
 		sender = NewSenderOTel(log, opts)

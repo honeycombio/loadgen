@@ -103,7 +103,17 @@ Functionally, the system works by spinning up a number of goroutines, each of wh
 
 Ramp up and down are handled only by increasing or decreasing the number of goroutines.
 
-To mix different kinds of traces, or send traces to multiple datasets, use multiple loadgen processes.
+To mix different kinds of traces, use multiple loadgen processes.
+
+### Distributed traces across datasets
+
+With the `otel` sender, `--dataset` can be given more than once to simulate a distributed trace. Each dataset becomes a service (`service.name`), and spans at level N of the trace are sent by dataset N modulo the number of datasets, starting with the first dataset at the root. All of the spans still belong to the same trace. Unless `--depth` is set, it defaults to the number of datasets (otherwise 3), and `--nspans` defaults to at least `--depth`.
+
+```
+loadgen --sender=otel --dataset=fakeGateway --dataset=fakeWebService1 --dataset=db2 --tps=5 --runtime=1m
+```
+
+The `honeycomb` (libhoney) sender supports only a single dataset.
 
 ## Configuration File
 
