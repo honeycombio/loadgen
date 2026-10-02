@@ -32,8 +32,9 @@ func (s OTelSendable) Send() {
 }
 
 type SenderOTel struct {
-	tracer   trace.Tracer
-	shutdown func()
+	// one tracer per dataset; the dataset is the tracer provider's service.name
+	tracers   []trace.Tracer
+	providers []*sdktrace.TracerProvider
 }
 
 func otelTracesFromURL(u *url.URL) string {
@@ -54,29 +55,34 @@ func (l OtelLogger) Fatalf(format string, args ...interface{}) {
 }
 
 func NewSenderOTel(log Logger, opts *Options) *SenderOTel {
-	var client otlptrace.Client
-	switch opts.Output.Protocol {
-	case "grpc":
-		client = setupOTelGRPCClient(opts)
-	case "http":
-		client = setupOTelHTTPClient(opts)
-	default:
-		log.Fatal("unknown protocol: %s", opts.Output.Protocol)
-	}
+	newExporter := func() sdktrace.SpanExporter {
+		var client otlptrace.Client
+		switch opts.Output.Protocol {
+		case "grpc":
+			client = setupOTelGRPCClient(opts)
+		case "http":
+			client = setupOTelHTTPClient(opts)
+		default:
+			log.Fatal("unknown protocol: %s", opts.Output.Protocol)
+		}
 
-	exporter, err := otlptrace.New(
-		context.Background(),
-		client,
-	)
-	if err != nil {
-		log.Fatal("failure configuring otel trace exporter: %v", err)
+		exporter, err := otlptrace.New(context.Background(), client)
+		if err != nil {
+			log.Fatal("failure configuring otel trace exporter: %v", err)
+		}
+		return exporter
 	}
+	return newSenderOTelWithExporters(opts, newExporter)
+}
 
+// newSenderOTelWithExporters creates a sender with one tracer provider per dataset,
+// each of which gets its own exporter from newExporter and reports the dataset
+// as its service.name. Spans at level N are sent by dataset N % len(datasets).
+func newSenderOTelWithExporters(opts *Options, newExporter func() sdktrace.SpanExporter) *SenderOTel {
 	var bspOpts []sdktrace.BatchSpanProcessorOption
 	if opts.Output.BatchTimeout != 0 {
 		bspOpts = append(bspOpts, sdktrace.WithBatchTimeout(opts.Output.BatchTimeout))
 	}
-
 	if opts.Output.MaxQueueSize != 0 {
 		bspOpts = append(bspOpts, sdktrace.WithMaxQueueSize(opts.Output.MaxQueueSize))
 	}
@@ -87,28 +93,32 @@ func NewSenderOTel(log Logger, opts *Options) *SenderOTel {
 		bspOpts = append(bspOpts, sdktrace.WithExportTimeout(opts.Output.ExportTimeout))
 	}
 
-	bsp := sdktrace.NewBatchSpanProcessor(exporter, bspOpts...)
-	otel.SetTracerProvider(sdktrace.NewTracerProvider(
-		sdktrace.WithSpanProcessor(bsp),
-		sdktrace.WithResource(resource.NewWithAttributes(semconv.SchemaURL, semconv.ServiceNameKey.String(opts.Telemetry.Dataset))),
-	))
-	otelshutdown := func() {
-		_ = bsp.Shutdown(context.Background())
-		_ = exporter.Shutdown(context.Background())
+	sender := &SenderOTel{}
+	for _, dataset := range opts.Telemetry.Dataset {
+		tp := sdktrace.NewTracerProvider(
+			sdktrace.WithSpanProcessor(sdktrace.NewBatchSpanProcessor(newExporter(), bspOpts...)),
+			sdktrace.WithResource(resource.NewWithAttributes(semconv.SchemaURL, semconv.ServiceNameKey.String(dataset))),
+		)
+		sender.providers = append(sender.providers, tp)
+		sender.tracers = append(sender.tracers, tp.Tracer(ResourceLibrary, trace.WithInstrumentationVersion(ResourceVersion)))
 	}
-
-	return &SenderOTel{
-		tracer:   otel.Tracer(ResourceLibrary, trace.WithInstrumentationVersion(ResourceVersion)),
-		shutdown: otelshutdown,
-	}
+	// trace context propagates through the ctx, so the global provider is only a fallback
+	otel.SetTracerProvider(sender.providers[0])
+	return sender
 }
 
 func (t *SenderOTel) Close() {
-	t.shutdown()
+	for _, tp := range t.providers {
+		_ = tp.Shutdown(context.Background())
+	}
+}
+
+func (t *SenderOTel) tracerForLevel(level int) trace.Tracer {
+	return t.tracers[level%len(t.tracers)]
 }
 
 func (t *SenderOTel) CreateTrace(ctx context.Context, name string, fielder *Fielder, count int64) (context.Context, Sendable) {
-	ctx, root := t.tracer.Start(ctx, name)
+	ctx, root := t.tracerForLevel(0).Start(ctx, name)
 	fielder.AddFields(root, count, 0)
 	var ots OTelSendable
 	ots.Span = root
@@ -116,7 +126,7 @@ func (t *SenderOTel) CreateTrace(ctx context.Context, name string, fielder *Fiel
 }
 
 func (t *SenderOTel) CreateSpan(ctx context.Context, name string, level int, fielder *Fielder) (context.Context, Sendable) {
-	ctx, span := t.tracer.Start(ctx, name)
+	ctx, span := t.tracerForLevel(level).Start(ctx, name)
 	if rand.Intn(10) == 0 {
 		span.AddEvent("exception", trace.WithAttributes(
 			attribute.KeyValue{Key: "exception.type", Value: attribute.StringValue("error")},
