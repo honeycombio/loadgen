@@ -44,6 +44,31 @@ func TestApplyDefaults(t *testing.T) {
 	}
 }
 
+func TestParseHost(t *testing.T) {
+	tests := []struct {
+		host     string
+		insecure bool
+		grpc     bool
+		want     string
+	}{
+		{"https://api.example.com", false, false, "https://api.example.com:443"},
+		{"api.example.com", false, false, "https://api.example.com:443"},
+		{"api.example.com", true, false, "http://api.example.com:80"},
+		{"http://localhost", false, false, "http://localhost:80"},
+		{"https://api.example.com", false, true, "https://api.example.com:4317"},
+		{"api.example.com", true, true, "http://api.example.com:4317"},
+		{"https://api.example.com:9000", false, false, "https://api.example.com:9000"},
+		{"https://api.example.com:9000", false, true, "https://api.example.com:9000"},
+		{"honeycomb", false, true, "https://api.honeycomb.io:443"},
+		{"local", false, false, "http://localhost:8889"},
+	}
+	for _, tt := range tests {
+		if got := parseHost(NewLogger(0), tt.host, tt.insecure, tt.grpc).String(); got != tt.want {
+			t.Errorf("parseHost(%q, insecure=%v, grpc=%v) = %s, want %s", tt.host, tt.insecure, tt.grpc, got, tt.want)
+		}
+	}
+}
+
 func TestOTelSenderMultipleDatasets(t *testing.T) {
 	datasets := []string{"gateway", "web", "db"}
 	opts := newOptions()

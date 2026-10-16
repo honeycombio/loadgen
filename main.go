@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	_ "net/http/pprof"
 	"net/url"
@@ -23,7 +24,7 @@ var ResourceVersion = "dev"
 
 type Options struct {
 	Telemetry struct {
-		Host     string   `long:"host" description:"the url of the host to receive the telemetry (or honeycomb, dogfood, local)" default:"honeycomb"`
+		Host     string   `long:"host" description:"the url of the host to receive the telemetry (or honeycomb, dogfood, local); without a port, uses 4317 for otel over grpc, otherwise 443 for https or 80 for http" default:"honeycomb"`
 		Insecure bool     `long:"insecure" description:"use this for insecure http (not https) connections" yaml:",omitempty"`
 		Dataset  []string `long:"dataset" description:"dataset (service name) to send traces to; repeat to simulate a distributed trace, with one dataset per level starting at the root (otel sender only)" env:"HONEYCOMB_DATASET" default:"loadgen"`
 		APIKey   string   `long:"apikey" description:"the honeycomb API key(*)" env:"HONEYCOMB_API_KEY" yaml:"-"`
@@ -108,7 +109,9 @@ func (o *Options) DebugLevel() int {
 // parses the host information and returns a cleaned-up version to make
 // it easier to make sure that things are properly specified
 // exits if it can't make sense of it
-func parseHost(log Logger, host string, insecure bool) *url.URL {
+// A host without a port gets 4317 for OTLP/gRPC, and otherwise the default
+// port of its scheme (443 for https, 80 for http).
+func parseHost(log Logger, host string, insecure bool, grpc bool) *url.URL {
 	switch host {
 	case "honeycomb":
 		host = "https://api.honeycomb.io:443"
@@ -128,9 +131,15 @@ func parseHost(log Logger, host string, insecure bool) *url.URL {
 	if err != nil {
 		log.Fatal("unable to parse host: %s\n", err)
 	}
-	port := u.Port()
-	if port == "" {
-		u.Host = fmt.Sprintf("%s:4317", u.Host) // default GRPC port
+	if u.Port() == "" {
+		port := "443"
+		switch {
+		case grpc:
+			port = "4317" // default GRPC port
+		case u.Scheme == "http":
+			port = "80"
+		}
+		u.Host = net.JoinHostPort(u.Hostname(), port)
 	}
 	return u
 }
@@ -283,7 +292,8 @@ func main() {
 		return getFielder
 	}
 
-	opts.apihost = parseHost(log, opts.Telemetry.Host, opts.Telemetry.Insecure)
+	grpc := opts.Output.Sender == "otel" && opts.Output.Protocol == "grpc"
+	opts.apihost = parseHost(log, opts.Telemetry.Host, opts.Telemetry.Insecure, grpc)
 
 	log.Info("host: %s, dataset: %s, apikey: ...%4.4s\n", opts.apihost.String(), strings.Join(opts.Telemetry.Dataset, ","), opts.Telemetry.APIKey)
 
