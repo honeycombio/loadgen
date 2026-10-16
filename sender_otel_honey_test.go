@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"testing"
+	"time"
 
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
@@ -62,12 +63,12 @@ func TestOTelSenderMultipleDatasets(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	ctx, root := sender.CreateTrace(context.Background(), "root", fielder, 1)
-	ctx, child := sender.CreateSpan(ctx, "child", 1, fielder)
-	_, grandchild := sender.CreateSpan(ctx, "grandchild", 2, fielder)
-	grandchild.Send()
-	child.Send()
-	root.Send()
+	ctx, root := sender.CreateTrace(context.Background(), "root", fielder, 1, time.Time{})
+	ctx, child := sender.CreateSpan(ctx, "child", 1, fielder, time.Time{})
+	_, grandchild := sender.CreateSpan(ctx, "grandchild", 2, fielder, time.Time{})
+	grandchild.Send(time.Time{})
+	child.Send(time.Time{})
+	root.Send(time.Time{})
 	// flush rather than Close: shutting down an in-memory exporter discards its spans
 	for _, tp := range sender.providers {
 		if err := tp.ForceFlush(context.Background()); err != nil {

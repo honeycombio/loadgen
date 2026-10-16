@@ -34,6 +34,7 @@ type Options struct {
 		Extra     int           `long:"extra" description:"the number of random fields in a span beyond the standard ones" default:"0" yaml:",omitempty"`
 		TraceTime time.Duration `long:"tracetime" description:"the duration of a trace" default:"1s"`
 	} `group:"Trace Format Options"`
+	Backfill BackfillOptions `group:"Backfill Options"`
 	Quantity struct {
 		TPS        int           `long:"tps" description:"the maximum number of traces to generate per second" default:"1"`
 		TraceCount int64         `long:"tracecount" description:"the maximum number of traces to generate (0 means no limit, but if runtime is not specified defaults to 1)" default:"0" yaml:",omitempty"`
@@ -45,7 +46,7 @@ type Options struct {
 		Msgpack            bool          `long:"msgpack" description:"use this for emitting honeycomb data format using msgpack"`
 		Protocol           string        `long:"protocol" description:"for otel only, protocol to use" choice:"grpc" choice:"http" default:"grpc"`
 		MaxQueueSize       int           `long:"maxqueuesize" description:"for otel only, maximum number of spans to queue before dropping"`
-		MaxExportBatchSize int           `long:"maxexportbatchsize" description:"for otel only, maximum number of spans to export at once"`
+		MaxExportBatchSize int           `long:"maxexportbatchsize" description:"maximum number of spans to export at once (for honeycomb, the events per batch request, default 50)"`
 		BatchTimeout       time.Duration `long:"batchtimeout" description:"for otel only, maximum time to wait before sending a batch"`
 		ExportTimeout      time.Duration `long:"exporttimeout" description:"for otel only, maximum time to wait for a batch send to be completed"`
 	} `group:"Output Options"`
@@ -253,6 +254,9 @@ func main() {
 	}
 
 	opts.ApplyDefaults()
+	if err := opts.Backfill.Validate(); err != nil {
+		log.Fatalf("%v", err)
+	}
 
 	if opts.Global.Seed == "" {
 		opts.Global.Seed = strings.Join(opts.Telemetry.Dataset, ",")
@@ -293,7 +297,7 @@ func main() {
 		if len(opts.Telemetry.Dataset) > 1 {
 			log.Fatal("multiple datasets are only supported by the otel sender\n")
 		}
-		sender = NewSenderHoneycomb(opts)
+		sender = NewSenderHoneycomb(log, opts)
 	case "otel":
 		sender = NewSenderOTel(log, opts)
 	}
