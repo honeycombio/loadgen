@@ -25,12 +25,15 @@ type ObsoleteSender interface {
 	Run(wg *sync.WaitGroup, spans chan *Span, stop chan struct{})
 }
 
+// A Sendable is a span that has been started; Send ends it at the given time
+// and sends it. The zero time means now.
 type Sendable interface {
-	Send()
+	Send(end time.Time)
 }
 
+// A Sender creates spans that start at the given time; the zero time means now.
 type Sender interface {
-	CreateTrace(ctx context.Context, name string, fielder *Fielder, count int64) (context.Context, Sendable)
-	CreateSpan(ctx context.Context, name string, level int, fielder *Fielder) (context.Context, Sendable)
+	CreateTrace(ctx context.Context, name string, fielder *Fielder, count int64, start time.Time) (context.Context, Sendable)
+	CreateSpan(ctx context.Context, name string, level int, fielder *Fielder, start time.Time) (context.Context, Sendable)
 	Close()
 }

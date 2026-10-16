@@ -29,7 +29,9 @@ const (
 type TraceGenerator struct {
 	depth      int
 	nspans     int
-	duration   time.Duration
+	duration   time.Duration // the duration of each trace, unless backfilling
+	interval   time.Duration // how often each generator goroutine starts a trace
+	backfill   BackfillOptions
 	getFielder func() *Fielder
 	chans      []chan struct{}
 	mut        sync.RWMutex
@@ -40,12 +42,27 @@ type TraceGenerator struct {
 // make sure it implements Generator
 var _ Generator = (*TraceGenerator)(nil)
 
+// backfillTick is the shortest interval at which a generator goroutine starts
+// backfilled traces.
+const backfillTick = 10 * time.Millisecond
+
 func NewTraceGenerator(tsender Sender, getFielder func() *Fielder, log Logger, opts *Options) *TraceGenerator {
 	chans := make([]chan struct{}, 0)
+	// Normally a generator spends its whole interval generating one trace.
+	interval := opts.Format.TraceTime
+	if opts.Backfill.Enabled() {
+		// Backfilled traces take no time to generate, so the interval only paces
+		// them; use the fewest generators that each start a trace at most every backfillTick.
+		tps := float64(max(opts.Quantity.TPS, 1))
+		ngenerators := math.Ceil(tps * backfillTick.Seconds())
+		interval = time.Duration(ngenerators / tps * float64(time.Second))
+	}
 	return &TraceGenerator{
 		depth:      opts.Format.Depth,
 		nspans:     opts.Format.NSpans,
 		duration:   opts.Format.TraceTime,
+		interval:   interval,
+		backfill:   opts.Backfill,
 		getFielder: getFielder,
 		chans:      chans,
 		log:        log,
@@ -61,14 +78,14 @@ func NewTraceGenerator(tsender Sender, getFielder func() *Fielder, log Logger, o
 // - numOfSpansGenerated is a pointer to the number of spans generated so far. This is only used for debugging.
 // If nspans is less than depth, the trace will be truncated at nspans.
 // If nspans is greater than depth, some of the children will have siblings.
-func (s *TraceGenerator) generate_spans(ctx context.Context, fielder *Fielder, level int, depth int, nspans int, timeRemaining time.Duration) int {
+func (s *TraceGenerator) generate_spans(ctx context.Context, clk *spanClock, fielder *Fielder, level int, depth int, nspans int, timeRemaining time.Duration) int {
 	if timeRemaining <= 0 {
 		return 0
 	}
 
 	if nspans == 0 {
 		// if there's still time remaining, sleep for the remainder of the time
-		time.Sleep(timeRemaining)
+		clk.Sleep(timeRemaining)
 		return 0
 	}
 
@@ -79,12 +96,12 @@ func (s *TraceGenerator) generate_spans(ctx context.Context, fielder *Fielder, l
 		for i := 0; i < nspans; i++ {
 			durationThisSpan := durationRemaining / time.Duration(nspans-i)
 			durationRemaining -= durationThisSpan
-			time.Sleep(durationThisSpan / 2)
-			_, span := s.tracer.CreateSpan(ctx, fielder.GetServiceName(depth), level, fielder)
+			clk.Sleep(durationThisSpan / 2)
+			_, span := s.tracer.CreateSpan(ctx, fielder.GetServiceName(depth), level, fielder, clk.Now())
 			spansCreated++
 
-			time.Sleep(durationThisSpan / 2)
-			span.Send()
+			clk.Sleep(durationThisSpan / 2)
+			span.Send(clk.Now())
 		}
 
 		return spansCreated
@@ -124,49 +141,57 @@ func (s *TraceGenerator) generate_spans(ctx context.Context, fielder *Fielder, l
 	for i := 0; i < spansAtThisLevel; i++ {
 		durationThisSpan := durationRemaining / time.Duration(spansAtThisLevel-i)
 		durationRemaining -= durationThisSpan
-		time.Sleep(durationThisSpan / 2)
-		childctx, span := s.tracer.CreateSpan(ctx, fielder.GetServiceName(depth), level, fielder)
+		clk.Sleep(durationThisSpan / 2)
+		childctx, span := s.tracer.CreateSpan(ctx, fielder.GetServiceName(depth), level, fielder, clk.Now())
 		spansCreated++
 
 		nextDepth := depth - 1
 		nextSpanCount := spancountsPerSpanAtThisLevel[i] - 1
-		childSpansCreated := s.generate_spans(childctx, fielder, level+1, nextDepth, nextSpanCount, durationPerChild)
-		time.Sleep(durationThisSpan / 2)
+		childSpansCreated := s.generate_spans(childctx, clk, fielder, level+1, nextDepth, nextSpanCount, durationPerChild)
+		clk.Sleep(durationThisSpan / 2)
 		spansCreated += childSpansCreated
-		span.Send()
+		span.Send(clk.Now())
 	}
 
 	return spansCreated
 }
 
-func (s *TraceGenerator) generate_root(fielder *Fielder, count int64, depth int, nspans int, timeRemaining time.Duration) {
+// generate_root generates a trace lasting timeRemaining. If clk is a backfill
+// clock, the trace starts at clk.Now() and nothing sleeps.
+func (s *TraceGenerator) generate_root(clk *spanClock, fielder *Fielder, count int64, depth int, nspans int, timeRemaining time.Duration) {
 	ctx := context.Background()
-	ctx, root := s.tracer.CreateTrace(ctx, fielder.GetServiceName(depth), fielder, count)
+	start := clk.Now()
+	ctx, root := s.tracer.CreateTrace(ctx, fielder.GetServiceName(depth), fielder, count, start)
 	thisSpanDuration := time.Duration(rand.Intn(int(timeRemaining) / (nspans + 1)))
 	childDuration := (timeRemaining - thisSpanDuration)
 
 	now := time.Now()
-	time.Sleep(thisSpanDuration / 2)
-	totalSpanCreated := s.generate_spans(ctx, fielder, 1, depth-1, nspans-1, childDuration)
-	time.Sleep(thisSpanDuration / 2)
+	clk.Sleep(thisSpanDuration / 2)
+	totalSpanCreated := s.generate_spans(ctx, clk, fielder, 1, depth-1, nspans-1, childDuration)
+	clk.Sleep(thisSpanDuration / 2)
 	totalSpanCreated++
-	root.Send()
+	end := clk.Now()
+	if !start.IsZero() {
+		// the children may not use all of their time, so end a backfilled root
+		// exactly when its sampled duration is up
+		end = start.Add(timeRemaining)
+	}
+	root.Send(end)
 	s.log.Debug("generated %d spans within %v\n", totalSpanCreated, time.Since(now))
 }
 
 // generator is a single goroutine that generates traces and sends them to the spans channel.
 // It runs until the stop channel is closed.
 // The trace time is determined by the duration, and as soon as one trace is sent the next one is started.
-func (s *TraceGenerator) generator(wg *sync.WaitGroup, counter chan int64) {
-	s.mut.Lock()
+func (s *TraceGenerator) generator(wg *sync.WaitGroup, counter chan int64, stop chan struct{}) {
+	s.mut.RLock()
 	depth := s.depth
 	nspans := s.nspans
 	duration := s.duration
-	stop := make(chan struct{})
-	s.chans = append(s.chans, stop)
-	s.mut.Unlock()
+	interval := s.interval
+	s.mut.RUnlock()
 
-	ticker := time.NewTicker(duration)
+	ticker := time.NewTicker(interval)
 	fielder := s.getFielder()
 	defer wg.Done()
 
@@ -176,12 +201,25 @@ func (s *TraceGenerator) generator(wg *sync.WaitGroup, counter chan int64) {
 			ticker.Stop()
 			return
 		case <-ticker.C:
-			// generate a trace if we haven't been stopped by the counter
+			if !s.backfill.Enabled() {
+				// generate a trace if we haven't been stopped by the counter
+				select {
+				case count := <-counter:
+					s.generate_root(&spanClock{}, fielder, count, depth, nspans, duration)
+				default:
+					// do nothing, we're done, and the stop will be caught by the outer select
+				}
+				continue
+			}
+			// Backfilled traces are quick to make, so many ticks compete for the
+			// counter; wait for it rather than skip the tick when it isn't ready.
 			select {
 			case count := <-counter:
-				s.generate_root(fielder, count, depth, nspans, duration)
-			default:
-				// do nothing, we're done, and the stop will be caught by the outer select
+				start, d := s.backfill.pickTrace(time.Now())
+				s.generate_root(&spanClock{now: start}, fielder, count, depth, nspans, d)
+			case <-stop:
+				ticker.Stop()
+				return
 			}
 		}
 	}
@@ -231,8 +269,14 @@ func (s *TraceGenerator) Generate(opts *Options, wg *sync.WaitGroup, stop chan s
 					state = Running
 				} else {
 					s.log.Debug("starting new generator\n")
+					// register the generator's stop channel before starting it, so that
+					// stopping during the ramp-up can't miss it
+					genstop := make(chan struct{})
+					s.mut.Lock()
+					s.chans = append(s.chans, genstop)
+					s.mut.Unlock()
 					wg.Add(1)
-					go s.generator(wg, counter)
+					go s.generator(wg, counter, genstop)
 				}
 			case Running:
 				// do nothing
@@ -258,5 +302,5 @@ func (s *TraceGenerator) Generate(opts *Options, wg *sync.WaitGroup, stop chan s
 func (s *TraceGenerator) TPS() float64 {
 	s.mut.RLock()
 	defer s.mut.RUnlock()
-	return 1.0 / s.duration.Seconds()
+	return 1.0 / s.interval.Seconds()
 }
