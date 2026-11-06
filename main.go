@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	_ "net/http/pprof"
 	"net/url"
@@ -23,7 +24,7 @@ var ResourceVersion = "dev"
 
 type Options struct {
 	Telemetry struct {
-		Host     string   `long:"host" description:"the url of the host to receive the telemetry (or honeycomb, dogfood, local)" default:"honeycomb"`
+		Host     string   `long:"host" description:"the url of the host to receive the telemetry (or honeycomb, dogfood, local); without a port, uses 4317 for otel over grpc, otherwise 443 for https or 80 for http" default:"honeycomb"`
 		Insecure bool     `long:"insecure" description:"use this for insecure http (not https) connections" yaml:",omitempty"`
 		Dataset  []string `long:"dataset" description:"dataset (service name) to send traces to; repeat to simulate a distributed trace, with one dataset per level starting at the root (otel sender only)" env:"HONEYCOMB_DATASET" default:"loadgen"`
 		APIKey   string   `long:"apikey" description:"the honeycomb API key(*)" env:"HONEYCOMB_API_KEY" yaml:"-"`
@@ -34,6 +35,7 @@ type Options struct {
 		Extra     int           `long:"extra" description:"the number of random fields in a span beyond the standard ones" default:"0" yaml:",omitempty"`
 		TraceTime time.Duration `long:"tracetime" description:"the duration of a trace" default:"1s"`
 	} `group:"Trace Format Options"`
+	Backfill BackfillOptions `group:"Backfill Options"`
 	Quantity struct {
 		TPS        int           `long:"tps" description:"the maximum number of traces to generate per second" default:"1"`
 		TraceCount int64         `long:"tracecount" description:"the maximum number of traces to generate (0 means no limit, but if runtime is not specified defaults to 1)" default:"0" yaml:",omitempty"`
@@ -45,7 +47,7 @@ type Options struct {
 		Msgpack            bool          `long:"msgpack" description:"use this for emitting honeycomb data format using msgpack"`
 		Protocol           string        `long:"protocol" description:"for otel only, protocol to use" choice:"grpc" choice:"http" default:"grpc"`
 		MaxQueueSize       int           `long:"maxqueuesize" description:"for otel only, maximum number of spans to queue before dropping"`
-		MaxExportBatchSize int           `long:"maxexportbatchsize" description:"for otel only, maximum number of spans to export at once"`
+		MaxExportBatchSize int           `long:"maxexportbatchsize" description:"maximum number of spans to export at once (for honeycomb, the events per batch request, default 50)"`
 		BatchTimeout       time.Duration `long:"batchtimeout" description:"for otel only, maximum time to wait before sending a batch"`
 		ExportTimeout      time.Duration `long:"exporttimeout" description:"for otel only, maximum time to wait for a batch send to be completed"`
 	} `group:"Output Options"`
@@ -107,7 +109,9 @@ func (o *Options) DebugLevel() int {
 // parses the host information and returns a cleaned-up version to make
 // it easier to make sure that things are properly specified
 // exits if it can't make sense of it
-func parseHost(log Logger, host string, insecure bool) *url.URL {
+// A host without a port gets 4317 for OTLP/gRPC, and otherwise the default
+// port of its scheme (443 for https, 80 for http).
+func parseHost(log Logger, host string, insecure bool, grpc bool) *url.URL {
 	switch host {
 	case "honeycomb":
 		host = "https://api.honeycomb.io:443"
@@ -127,9 +131,15 @@ func parseHost(log Logger, host string, insecure bool) *url.URL {
 	if err != nil {
 		log.Fatal("unable to parse host: %s\n", err)
 	}
-	port := u.Port()
-	if port == "" {
-		u.Host = fmt.Sprintf("%s:4317", u.Host) // default GRPC port
+	if u.Port() == "" {
+		port := "443"
+		switch {
+		case grpc:
+			port = "4317" // default GRPC port
+		case u.Scheme == "http":
+			port = "80"
+		}
+		u.Host = net.JoinHostPort(u.Hostname(), port)
 	}
 	return u
 }
@@ -253,6 +263,9 @@ func main() {
 	}
 
 	opts.ApplyDefaults()
+	if err := opts.Backfill.Validate(); err != nil {
+		log.Fatalf("%v", err)
+	}
 
 	if opts.Global.Seed == "" {
 		opts.Global.Seed = strings.Join(opts.Telemetry.Dataset, ",")
@@ -279,7 +292,8 @@ func main() {
 		return getFielder
 	}
 
-	opts.apihost = parseHost(log, opts.Telemetry.Host, opts.Telemetry.Insecure)
+	grpc := opts.Output.Sender == "otel" && opts.Output.Protocol == "grpc"
+	opts.apihost = parseHost(log, opts.Telemetry.Host, opts.Telemetry.Insecure, grpc)
 
 	log.Info("host: %s, dataset: %s, apikey: ...%4.4s\n", opts.apihost.String(), strings.Join(opts.Telemetry.Dataset, ","), opts.Telemetry.APIKey)
 
@@ -293,7 +307,7 @@ func main() {
 		if len(opts.Telemetry.Dataset) > 1 {
 			log.Fatal("multiple datasets are only supported by the otel sender\n")
 		}
-		sender = NewSenderHoneycomb(opts)
+		sender = NewSenderHoneycomb(log, opts)
 	case "otel":
 		sender = NewSenderOTel(log, opts)
 	}

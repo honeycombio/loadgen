@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math/rand"
 	"net/url"
+	"time"
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -27,8 +28,9 @@ type OTelSendable struct {
 	trace.Span
 }
 
-func (s OTelSendable) Send() {
-	(trace.Span)(s).End()
+func (s OTelSendable) Send(end time.Time) {
+	// the SDK treats a zero timestamp as now
+	(trace.Span)(s).End(trace.WithTimestamp(end))
 }
 
 type SenderOTel struct {
@@ -92,6 +94,10 @@ func newSenderOTelWithExporters(opts *Options, newExporter func() sdktrace.SpanE
 	if opts.Output.ExportTimeout != 0 {
 		bspOpts = append(bspOpts, sdktrace.WithExportTimeout(opts.Output.ExportTimeout))
 	}
+	if opts.Backfill.Enabled() {
+		// backfill runs as fast as it can send, so wait for the queue instead of dropping spans
+		bspOpts = append(bspOpts, sdktrace.WithBlocking())
+	}
 
 	sender := &SenderOTel{}
 	for _, dataset := range opts.Telemetry.Dataset {
@@ -117,18 +123,18 @@ func (t *SenderOTel) tracerForLevel(level int) trace.Tracer {
 	return t.tracers[level%len(t.tracers)]
 }
 
-func (t *SenderOTel) CreateTrace(ctx context.Context, name string, fielder *Fielder, count int64) (context.Context, Sendable) {
-	ctx, root := t.tracerForLevel(0).Start(ctx, name)
+func (t *SenderOTel) CreateTrace(ctx context.Context, name string, fielder *Fielder, count int64, start time.Time) (context.Context, Sendable) {
+	ctx, root := t.tracerForLevel(0).Start(ctx, name, trace.WithTimestamp(start))
 	fielder.AddFields(root, count, 0)
 	var ots OTelSendable
 	ots.Span = root
 	return ctx, ots
 }
 
-func (t *SenderOTel) CreateSpan(ctx context.Context, name string, level int, fielder *Fielder) (context.Context, Sendable) {
-	ctx, span := t.tracerForLevel(level).Start(ctx, name)
+func (t *SenderOTel) CreateSpan(ctx context.Context, name string, level int, fielder *Fielder, start time.Time) (context.Context, Sendable) {
+	ctx, span := t.tracerForLevel(level).Start(ctx, name, trace.WithTimestamp(start))
 	if rand.Intn(10) == 0 {
-		span.AddEvent("exception", trace.WithAttributes(
+		span.AddEvent("exception", trace.WithTimestamp(start), trace.WithAttributes(
 			attribute.KeyValue{Key: "exception.type", Value: attribute.StringValue("error")},
 			attribute.KeyValue{Key: "exception.message", Value: attribute.StringValue("error message")},
 			attribute.KeyValue{Key: "exception.stacktrace", Value: attribute.StringValue("stacktrace")},
