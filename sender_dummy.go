@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	"sync"
+	"sync/atomic"
+	"time"
 )
 
 type DummySender struct {
@@ -40,12 +42,13 @@ func (h *DummySender) send(span *Span) {
 
 type DummySendable struct{}
 
-func (s DummySendable) Send() {
+func (s DummySendable) Send(end time.Time) {
 }
 
 type SenderDummy struct {
-	tracecount int
-	nspans     int
+	// generators call the sender concurrently
+	tracecount atomic.Int64
+	nspans     atomic.Int64
 	log        Logger
 }
 
@@ -57,16 +60,16 @@ func NewSenderDummy(log Logger, opts *Options) Sender {
 }
 
 func (t *SenderDummy) Close() {
-	t.log.Warn("sender sent %d traces with %d spans\n", t.tracecount, t.nspans)
+	t.log.Warn("sender sent %d traces with %d spans\n", t.tracecount.Load(), t.nspans.Load())
 }
 
-func (t *SenderDummy) CreateTrace(ctx context.Context, name string, fielder *Fielder, count int64) (context.Context, Sendable) {
-	t.tracecount++
-	t.nspans++
+func (t *SenderDummy) CreateTrace(ctx context.Context, name string, fielder *Fielder, count int64, start time.Time) (context.Context, Sendable) {
+	t.tracecount.Add(1)
+	t.nspans.Add(1)
 	return ctx, DummySendable{}
 }
 
-func (t *SenderDummy) CreateSpan(ctx context.Context, name string, level int, fielder *Fielder) (context.Context, Sendable) {
-	t.nspans++
+func (t *SenderDummy) CreateSpan(ctx context.Context, name string, level int, fielder *Fielder, start time.Time) (context.Context, Sendable) {
+	t.nspans.Add(1)
 	return ctx, DummySendable{}
 }

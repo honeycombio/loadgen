@@ -115,6 +115,17 @@ loadgen --sender=otel --dataset=fakeGateway --dataset=fakeWebService1 --dataset=
 
 The `honeycomb` (libhoney) sender supports only a single dataset.
 
+### Backfilled traces
+
+Normally loadgen generates traces in real time: spans are stamped with the current time, and a trace lasting `--tracetime` takes that long to generate. To generate traces that have already happened, set `--backfillwindow`. Each trace then ends at a random time in the window before now, and lasts a duration drawn from a log-normal distribution with median `--durationmedian` and log standard deviation `--durationsigma`, truncated at `--durationmax`. `--tracetime` is ignored. Child spans still nest inside their parents, and spans are sent with explicit start and end times, so nothing sleeps and loadgen sends as fast as `--tps` allows or the CPU and network can keep up. In this mode, the senders wait for their queues instead of dropping spans.
+
+Send 1 million backfilled traces ending in the last 2 hours, with a median duration of 30 seconds and some lasting up to 4 hours, to the `/1/batch` API of a custom host:
+```
+loadgen --sender=honeycomb --host=https://api.example.com --dataset=loadtest --backfillwindow=2h --durationmedian=30s --durationsigma=2 --durationmax=4h --tps=20000 --tracecount=1000000 --maxexportbatchsize=1000
+```
+
+If `--host` has no port, loadgen uses 4317 for the `otel` sender over gRPC, and otherwise the default port of the scheme: 443 for `https` and 80 for `http`. The `otel` sender over `http` uses TLS unless `--insecure` is given.
+
 ## Configuration File
 
 A YAML configuration file can be used by specifying `--config=filename`.
